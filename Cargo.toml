@@ -1,0 +1,22 @@
+[package]
+name = "bookstore-order-management"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = "0.4"
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "mysql", "uuid", "chrono"] }
+tokio = { version = "1", features = ["full"] }
+dotenvy = "0.15"
+async-trait = "0.1"
+axum = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+
+[dev-dependencies]
+proptest = "1.0"
+cargo-watch = "8.4"
+axum-test = "15.0"

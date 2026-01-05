@@ -1,0 +1,798 @@
+{
+  "info": {
+    "name": "書店注文管理システム API",
+    "description": "ドメイン駆動設計を実践した書店注文管理システムのREST API。注文の作成から配達完了まで、完全な注文ライフサイクルを管理します。",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bookId",
+      "value": "550e8400-e29b-41d4-a716-446655440001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "ヘルスチェック",
+      "item": [
+        {
+          "name": "システム稼働状況確認",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "システムの稼働状況を確認します。"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "データ取得エンドポイント",
+      "item": [
+        {
+          "name": "注文一覧取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "すべての注文の一覧を取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文一覧取得（ステータスフィルタ）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders?status=Pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Pending",
+                  "description": "Pending, Confirmed, Shipped, Delivered, Cancelled"
+                }
+              ]
+            },
+            "description": "指定したステータスの注文のみを取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文詳細取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            },
+            "description": "特定の注文の詳細情報を取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "在庫一覧取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"]
+            },
+            "description": "すべての在庫情報の一覧を取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "在庫一覧取得（在庫数フィルタ）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory?max_quantity=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"],
+              "query": [
+                {
+                  "key": "max_quantity",
+                  "value": "10",
+                  "description": "指定した数以下の在庫のみを返す"
+                }
+              ]
+            },
+            "description": "在庫数が指定した値以下の書籍のみを取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "特定書籍の在庫取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory/{{bookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "{{bookId}}"]
+            },
+            "description": "特定の書籍の在庫情報を取得します。"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "在庫管理",
+      "item": [
+        {
+          "name": "在庫一覧取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"]
+            },
+            "description": "すべての在庫情報の一覧を取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "在庫一覧取得（フィルタリング）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory?max_quantity=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"],
+              "query": [
+                {
+                  "key": "max_quantity",
+                  "value": "5",
+                  "description": "指定した数以下の在庫のみを返す"
+                }
+              ]
+            },
+            "description": "在庫数が指定した値以下の書籍のみを取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "特定書籍の在庫取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory/{{bookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "{{bookId}}"]
+            },
+            "description": "特定の書籍の在庫情報を取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "在庫作成",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"book_id\": \"{{bookId}}\",\n  \"quantity\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/inventory",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"]
+            },
+            "description": "書籍の在庫を作成します（テスト用エンドポイント）。"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "注文管理",
+      "item": [
+        {
+          "name": "注文一覧取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "すべての注文の一覧を取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文一覧取得（ステータスフィルタリング）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders?status=Confirmed",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Confirmed",
+                  "description": "注文ステータス（Pending, Confirmed, Shipped, Delivered, Cancelled）"
+                }
+              ]
+            },
+            "description": "指定したステータスの注文のみを取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文詳細取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            },
+            "description": "特定の注文の詳細情報を取得します。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文作成",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.collectionVariables.set('orderId', responseJson.order_id);",
+                  "    console.log('Order ID saved:', responseJson.order_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "新しい注文を作成します。作成された注文IDは自動的に変数に保存されます。"
+          },
+          "response": []
+        },
+        {
+          "name": "書籍を注文に追加",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"book_id\": \"{{bookId}}\",\n  \"quantity\": 2,\n  \"unit_price\": 1500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "books"]
+            },
+            "description": "指定した注文に書籍を追加します。"
+          },
+          "response": []
+        },
+        {
+          "name": "配送先住所設定",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"postal_code\": \"1500001\",\n  \"prefecture\": \"東京都\",\n  \"city\": \"渋谷区\",\n  \"address_line1\": \"神宮前1-1-1\",\n  \"address_line2\": \"サンプルビル 3F\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/shipping-address",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "shipping-address"]
+            },
+            "description": "注文の配送先住所を設定します。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文確定",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "confirm"]
+            },
+            "description": "注文を確定します。在庫チェックが実行され、在庫が予約されます。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文発送",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/ship",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "ship"]
+            },
+            "description": "確定済みの注文を発送済み状態にします。"
+          },
+          "response": []
+        },
+        {
+          "name": "配達完了",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/deliver",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "deliver"]
+            },
+            "description": "発送済みの注文を配達完了状態にします。"
+          },
+          "response": []
+        },
+        {
+          "name": "注文キャンセル",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "cancel"]
+            },
+            "description": "注文をキャンセルします。予約済み在庫が解放されます。"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "完全な注文フロー",
+      "item": [
+        {
+          "name": "1. 在庫作成",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"book_id\": \"{{bookId}}\",\n  \"quantity\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/inventory",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"]
+            },
+            "description": "フロー開始: 書籍の在庫を作成"
+          },
+          "response": []
+        },
+        {
+          "name": "2. 注文作成",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.collectionVariables.set('orderId', responseJson.order_id);",
+                  "    console.log('Order ID saved:', responseJson.order_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "新しい注文を作成し、注文IDを保存"
+          },
+          "response": []
+        },
+        {
+          "name": "3. 書籍追加",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"book_id\": \"{{bookId}}\",\n  \"quantity\": 2,\n  \"unit_price\": 1500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "books"]
+            },
+            "description": "注文に書籍を追加"
+          },
+          "response": []
+        },
+        {
+          "name": "4. 配送先住所設定",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"postal_code\": \"1500001\",\n  \"prefecture\": \"東京都\",\n  \"city\": \"渋谷区\",\n  \"address_line1\": \"神宮前1-1-1\",\n  \"address_line2\": \"サンプルビル 3F\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/shipping-address",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "shipping-address"]
+            },
+            "description": "配送先住所を設定"
+          },
+          "response": []
+        },
+        {
+          "name": "5. 注文確定",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "confirm"]
+            },
+            "description": "注文を確定（在庫予約）"
+          },
+          "response": []
+        },
+        {
+          "name": "6. 発送",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/ship",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "ship"]
+            },
+            "description": "注文を発送済みに変更"
+          },
+          "response": []
+        },
+        {
+          "name": "7. 配達完了",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/deliver",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "deliver"]
+            },
+            "description": "フロー完了: 配達完了"
+          },
+          "response": []
+        },
+        {
+          "name": "8. 注文詳細確認",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            },
+            "description": "配達完了後の注文詳細を確認"
+          },
+          "response": []
+        },
+        {
+          "name": "9. 注文一覧確認",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "すべての注文一覧を確認"
+          },
+          "response": []
+        },
+        {
+          "name": "10. 在庫状況確認",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory/{{bookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "{{bookId}}"]
+            },
+            "description": "注文後の在庫状況を確認"
+          },
+          "response": []
+        },
+        {
+          "name": "11. 在庫一覧確認",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"]
+            },
+            "description": "全体の在庫一覧を確認"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "エラーケーステスト",
+      "item": [
+        {
+          "name": "存在しない書籍IDエラー",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"book_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 1,\n  \"unit_price\": 1500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "books"]
+            },
+            "description": "存在しない書籍IDで注文に書籍を追加しようとする（404エラー）"
+          },
+          "response": []
+        },
+        {
+          "name": "存在しない注文ID",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/00000000-0000-0000-0000-000000000000/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "00000000-0000-0000-0000-000000000000", "confirm"]
+            },
+            "description": "存在しない注文IDで操作を試行"
+          },
+          "response": []
+        },
+        {
+          "name": "不正なステータス遷移",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/ship",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "ship"]
+            },
+            "description": "確定されていない注文を発送しようとする（不正な遷移）"
+          },
+          "response": []
+        },
+        {
+          "name": "存在しない注文詳細取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "存在しない注文IDで詳細取得を試行（404エラー）"
+          },
+          "response": []
+        },
+        {
+          "name": "無効なUUID形式（注文）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/invalid-uuid",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "invalid-uuid"]
+            },
+            "description": "無効なUUID形式で注文詳細取得を試行（400エラー）"
+          },
+          "response": []
+        },
+        {
+          "name": "無効なステータスパラメータ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders?status=InvalidStatus",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "InvalidStatus",
+                  "description": "無効なステータス値"
+                }
+              ]
+            },
+            "description": "無効なステータスパラメータで注文一覧取得を試行（400エラー）"
+          },
+          "response": []
+        },
+        {
+          "name": "存在しない在庫取得",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "存在しない書籍IDで在庫取得を試行（404エラー）"
+          },
+          "response": []
+        },
+        {
+          "name": "無効なUUID形式（在庫）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory/invalid-uuid",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory", "invalid-uuid"]
+            },
+            "description": "無効なUUID形式で在庫取得を試行（400エラー）"
+          },
+          "response": []
+        },
+        {
+          "name": "無効な在庫数パラメータ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inventory?max_quantity=invalid",
+              "host": ["{{baseUrl}}"],
+              "path": ["inventory"],
+              "query": [
+                {
+                  "key": "max_quantity",
+                  "value": "invalid",
+                  "description": "無効な在庫数パラメータ"
+                }
+              ]
+            },
+            "description": "無効な在庫数パラメータで在庫一覧取得を試行（400エラー）"
+          },
+          "response": []
+        },
+        {
+          "name": "在庫不足エラー（注文確定時）",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "confirm"]
+            },
+            "description": "在庫数を超える注文を確定しようとする（在庫不足エラー）。事前に少ない在庫と多い数量の注文を作成しておく必要がある"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
