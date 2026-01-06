@@ -32,23 +32,26 @@ impl DatabaseConfig {
     /// 環境変数が設定されていない場合はデフォルト値を使用
     pub fn from_env() -> Result<Self, ConfigError> {
         let host = env::var("DATABASE_HOST").unwrap_or_else(|_| "localhost".to_string());
-        
+
         let port = env::var("DATABASE_PORT")
             .unwrap_or_else(|_| "3306".to_string())
             .parse::<u16>()
             .map_err(|e| ConfigError::InvalidValue(format!("Invalid DATABASE_PORT: {}", e)))?;
-        
+
         let database = env::var("DATABASE_NAME").unwrap_or_else(|_| "bookstore_db".to_string());
-        
+
         let username = env::var("DATABASE_USER").unwrap_or_else(|_| "bookstore_user".to_string());
-        
-        let password = env::var("DATABASE_PASSWORD").unwrap_or_else(|_| "bookstore_password".to_string());
-        
+
+        let password =
+            env::var("DATABASE_PASSWORD").unwrap_or_else(|_| "bookstore_password".to_string());
+
         let max_connections = env::var("DATABASE_MAX_CONNECTIONS")
             .unwrap_or_else(|_| "10".to_string())
             .parse::<u32>()
-            .map_err(|e| ConfigError::InvalidValue(format!("Invalid DATABASE_MAX_CONNECTIONS: {}", e)))?;
-        
+            .map_err(|e| {
+                ConfigError::InvalidValue(format!("Invalid DATABASE_MAX_CONNECTIONS: {}", e))
+            })?;
+
         Ok(Self {
             host,
             port,
@@ -58,16 +61,12 @@ impl DatabaseConfig {
             max_connections,
         })
     }
-    
+
     /// MySQL接続文字列を生成
     pub fn connection_string(&self) -> String {
         format!(
             "mysql://{}:{}@{}:{}/{}",
-            self.username,
-            self.password,
-            self.host,
-            self.port,
-            self.database
+            self.username, self.password, self.host, self.port, self.database
         )
     }
 }
@@ -77,14 +76,14 @@ mod tests {
     use super::*;
     use std::env;
     use std::sync::Mutex;
-    
+
     // テスト間の環境変数の競合を防ぐためのロック
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_from_env_with_all_variables() {
         let _lock = ENV_LOCK.lock().unwrap();
-        
+
         // 環境変数を設定
         env::set_var("DATABASE_HOST", "testhost");
         env::set_var("DATABASE_PORT", "3307");
@@ -114,7 +113,7 @@ mod tests {
     #[test]
     fn test_from_env_with_defaults() {
         let _lock = ENV_LOCK.lock().unwrap();
-        
+
         // 環境変数をクリア
         env::remove_var("DATABASE_HOST");
         env::remove_var("DATABASE_PORT");
@@ -151,7 +150,7 @@ mod tests {
     #[test]
     fn test_invalid_port() {
         let _lock = ENV_LOCK.lock().unwrap();
-        
+
         env::set_var("DATABASE_PORT", "invalid");
 
         let result = DatabaseConfig::from_env();
@@ -163,7 +162,7 @@ mod tests {
     #[test]
     fn test_invalid_max_connections() {
         let _lock = ENV_LOCK.lock().unwrap();
-        
+
         env::set_var("DATABASE_MAX_CONNECTIONS", "invalid");
 
         let result = DatabaseConfig::from_env();

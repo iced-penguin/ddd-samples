@@ -1,9 +1,11 @@
 use crate::domain::error::DomainError;
-use crate::domain::event::{DomainEvent, OrderConfirmed, OrderCancelled, OrderShipped, OrderDelivered};
-use crate::domain::model::{OrderId, CustomerId, BookId, OrderLine, ShippingAddress, OrderStatus, Money};
+use crate::domain::model::{
+    BookId, CustomerId, Money, OrderId, OrderLine, OrderStatus, ShippingAddress,
+};
 
-/// Order集約
+/// 注文集約
 /// 注文のライフサイクルを管理し、ビジネスルールを適用する
+/// 純粋なドメインオブジェクトとして、イベントの管理はアプリケーション層に委譲
 #[derive(Debug, Clone)]
 pub struct Order {
     id: OrderId,
@@ -11,7 +13,6 @@ pub struct Order {
     order_lines: Vec<OrderLine>,
     shipping_address: Option<ShippingAddress>,
     status: OrderStatus,
-    domain_events: Vec<DomainEvent>,
 }
 
 impl Order {
@@ -24,7 +25,6 @@ impl Order {
             order_lines: Vec::new(),
             shipping_address: None,
             status: OrderStatus::Pending,
-            domain_events: Vec::new(),
         }
     }
 
@@ -43,7 +43,6 @@ impl Order {
             order_lines,
             shipping_address,
             status,
-            domain_events: Vec::new(),
         })
     }
 
@@ -72,21 +71,25 @@ impl Order {
         self.status
     }
 
-    /// ドメインイベントを取得してクリア
-    pub fn take_domain_events(&mut self) -> Vec<DomainEvent> {
-        std::mem::take(&mut self.domain_events)
-    }
-
     /// 書籍を注文に追加
     /// 同じ書籍が既に存在する場合は数量を増加
-    pub fn add_book(&mut self, book_id: BookId, quantity: u32, unit_price: Money) -> Result<(), DomainError> {
+    pub fn add_book(
+        &mut self,
+        book_id: BookId,
+        quantity: u32,
+        unit_price: Money,
+    ) -> Result<(), DomainError> {
         // 数量のバリデーション（1以上）
         if quantity == 0 {
             return Err(DomainError::InvalidQuantity);
         }
 
         // 同じ書籍が既に存在するか確認
-        if let Some(existing_line) = self.order_lines.iter_mut().find(|line| line.book_id() == book_id) {
+        if let Some(existing_line) = self
+            .order_lines
+            .iter_mut()
+            .find(|line| line.book_id() == book_id)
+        {
             // 既存の注文明細の数量を増加
             existing_line.increase_quantity(quantity)?;
         } else {
@@ -107,11 +110,11 @@ impl Order {
     /// 小計 + 配送料（10,000円以上なら0円、未満なら500円）
     pub fn calculate_total(&self) -> Money {
         // 全注文明細の小計を合算
-        let subtotal = self.order_lines.iter()
+        let subtotal = self
+            .order_lines
+            .iter()
             .map(|line| line.subtotal())
-            .fold(Money::jpy(0), |acc, amount| {
-                acc.add(&amount).unwrap_or(acc)
-            });
+            .fold(Money::jpy(0), |acc, amount| acc.add(&amount).unwrap_or(acc));
 
         // 配送料の計算（10,000円以上なら0円、未満なら500円）
         let shipping_fee = if subtotal.amount() >= 10_000 {
@@ -133,36 +136,26 @@ impl Order {
         // ステータスがPendingであることを確認
         if self.status != OrderStatus::Pending {
             return Err(DomainError::InvalidOrderState(
-                "注文を確定できるのはPending状態のみです".to_string()
+                "注文を確定できるのはPending状態のみです".to_string(),
             ));
         }
 
         // 注文明細が1つ以上あることを確認
         if self.order_lines.is_empty() {
             return Err(DomainError::OrderValidation(
-                "注文明細が空です。少なくとも1つの書籍を追加してください".to_string()
+                "注文明細が空です。少なくとも1つの書籍を追加してください".to_string(),
             ));
         }
 
         // 配送先住所が設定されていることを確認
         if self.shipping_address.is_none() {
             return Err(DomainError::OrderValidation(
-                "配送先住所が設定されていません".to_string()
+                "配送先住所が設定されていません".to_string(),
             ));
         }
 
         // ステータスをConfirmedに変更
         self.status = OrderStatus::Confirmed;
-
-        // OrderConfirmedイベントを生成
-        let total_amount = self.calculate_total();
-        let event = OrderConfirmed::new(
-            self.id,
-            self.customer_id,
-            self.order_lines.clone(),
-            total_amount,
-        );
-        self.domain_events.push(DomainEvent::OrderConfirmed(event));
 
         Ok(())
     }
@@ -178,26 +171,18 @@ impl Order {
             }
             OrderStatus::Shipped | OrderStatus::Delivered => {
                 return Err(DomainError::InvalidOrderState(
-                    "発送済みまたは配達完了の注文はキャンセルできません".to_string()
+                    "発送済みまたは配達完了の注文はキャンセルできません".to_string(),
                 ));
             }
             OrderStatus::Cancelled => {
                 return Err(DomainError::InvalidOrderState(
-                    "既にキャンセル済みの注文です".to_string()
+                    "既にキャンセル済みの注文です".to_string(),
                 ));
             }
         }
 
         // ステータスをCancelledに変更
         self.status = OrderStatus::Cancelled;
-
-        // OrderCancelledイベントを生成
-        let event = OrderCancelled::new(
-            self.id,
-            self.customer_id,
-            self.order_lines.clone(),
-        );
-        self.domain_events.push(DomainEvent::OrderCancelled(event));
 
         Ok(())
     }
@@ -209,18 +194,12 @@ impl Order {
         // ステータスがConfirmedであることを確認
         if self.status != OrderStatus::Confirmed {
             return Err(DomainError::InvalidOrderState(
-                "発送済みにマークできるのはConfirmed状態のみです".to_string()
+                "発送済みにマークできるのはConfirmed状態のみです".to_string(),
             ));
         }
 
         // ステータスをShippedに変更
         self.status = OrderStatus::Shipped;
-
-        // OrderShippedイベントを生成
-        let shipping_address = self.shipping_address.clone()
-            .expect("Confirmed状態の注文には配送先住所が必須です");
-        let event = OrderShipped::new(self.id, shipping_address);
-        self.domain_events.push(DomainEvent::OrderShipped(event));
 
         Ok(())
     }
@@ -232,16 +211,12 @@ impl Order {
         // ステータスがShippedであることを確認
         if self.status != OrderStatus::Shipped {
             return Err(DomainError::InvalidOrderState(
-                "配達完了にマークできるのはShipped状態のみです".to_string()
+                "配達完了にマークできるのはShipped状態のみです".to_string(),
             ));
         }
 
         // ステータスをDeliveredに変更
         self.status = OrderStatus::Delivered;
-
-        // OrderDeliveredイベントを生成
-        let event = OrderDelivered::new(self.id);
-        self.domain_events.push(DomainEvent::OrderDelivered(event));
 
         Ok(())
     }
@@ -285,7 +260,7 @@ mod tests {
 
         let book_id = BookId::new();
         let price = Money::jpy(1000);
-        
+
         order.add_book(book_id, 2, price).unwrap();
         order.add_book(book_id, 3, price).unwrap();
 
@@ -318,7 +293,8 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         order.set_shipping_address(address);
         assert!(order.shipping_address().is_some());
@@ -372,17 +348,14 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
 
         // 注文を確定
         let result = order.confirm();
         assert!(result.is_ok());
         assert_eq!(order.status(), OrderStatus::Confirmed);
-        
-        // イベントが生成されたことを確認
-        let events = order.take_domain_events();
-        assert_eq!(events.len(), 1);
     }
 
     #[test]
@@ -398,7 +371,8 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
 
         // 注文明細なしで確定を試みる
@@ -449,7 +423,8 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
         order.confirm().unwrap();
 
@@ -475,7 +450,8 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
         order.confirm().unwrap();
         order.mark_as_shipped().unwrap();
@@ -501,7 +477,8 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
         order.confirm().unwrap();
 
@@ -537,7 +514,8 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
         order.confirm().unwrap();
         order.mark_as_shipped().unwrap();
@@ -564,7 +542,8 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
         order.confirm().unwrap();
 

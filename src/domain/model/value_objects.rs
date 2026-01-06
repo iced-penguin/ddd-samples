@@ -1,6 +1,6 @@
-use uuid::Uuid;
 use crate::domain::error::DomainError;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// 注文の一意識別子
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -130,7 +130,12 @@ impl Money {
     pub fn new(amount: i64, currency: String) -> Result<Self, DomainError> {
         let currency = match currency.as_str() {
             "JPY" => Currency::JPY,
-            _ => return Err(DomainError::InvalidValue(format!("サポートされていない通貨: {}", currency))),
+            _ => {
+                return Err(DomainError::InvalidValue(format!(
+                    "サポートされていない通貨: {}",
+                    currency
+                )))
+            }
         };
         Ok(Self { amount, currency })
     }
@@ -176,7 +181,7 @@ impl Money {
 }
 
 /// 注文明細を表す値オブジェクト
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderLine {
     book_id: BookId,
     quantity: u32,
@@ -337,7 +342,10 @@ impl OrderStatus {
             "Shipped" => Ok(OrderStatus::Shipped),
             "Delivered" => Ok(OrderStatus::Delivered),
             "Cancelled" => Ok(OrderStatus::Cancelled),
-            _ => Err(DomainError::InvalidValue(format!("無効な注文ステータス: {}", s))),
+            _ => Err(DomainError::InvalidValue(format!(
+                "無効な注文ステータス: {}",
+                s
+            ))),
         }
     }
 

@@ -85,7 +85,7 @@ curl -X POST http://localhost:3000/orders/{order_id}/books \
 curl -X POST http://localhost:3000/orders/{order_id}/confirm
 ```
 
-詳細なAPIリファレンスについては、[APIリファレンス](docs/API_REFERENCE.md)と[注文フローガイド](docs/ORDER_FLOW_GUIDE.md)を参照してください。
+詳細なAPIの使用方法については、[注文フローガイド](docs/ORDER_FLOW_GUIDE.md)を参照してください。
 
 ## 🛠️ 開発
 
@@ -159,9 +159,8 @@ docker exec -it bookstore_mysql mysql -u bookstore_user -p bookstore_db
 - [DDDコンセプトガイド](docs/DDD_CONCEPTS.md) - ドメイン駆動設計の学習ポイント
 - [アーキテクチャガイド](docs/ARCHITECTURE.md) - システムアーキテクチャの詳細
 - [セットアップガイド](docs/SETUP_GUIDE.md) - 詳細なセットアップ手順
-- [APIリファレンス](docs/API_REFERENCE.md) - REST API の詳細仕様
+- [注文フローガイド](docs/ORDER_FLOW_GUIDE.md) - 注文処理の詳細フローとAPI使用方法
 - [テストガイド](docs/TESTING_GUIDE.md) - テスト戦略と実行方法
-- [注文フローガイド](docs/ORDER_FLOW_GUIDE.md) - 注文処理の詳細フロー
 
 ## 📖 参考資料
 

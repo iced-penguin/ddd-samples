@@ -60,9 +60,8 @@
 - **責務**: 注文・在庫管理のユースケース調整とトランザクション管理
 - **特徴**: ドメインオブジェクトを組み合わせて注文フローを実現
 - **構成要素**:
-  - **OrderApplicationService**: 注文作成、書籍追加、確定、キャンセル、発送、配達完了
-  - **OrderQueryService**: 注文の検索・取得
-  - **InventoryQueryService**: 在庫の検索・取得
+  - **OrderApplicationService**: 注文作成、書籍追加、確定、キャンセル、発送、配達完了、および注文の検索・取得
+  - **InventoryApplicationService**: 在庫作成、および在庫の検索・取得
 
 #### アダプター層
 - **責務**: 外部世界とドメイン層の橋渡し
@@ -71,7 +70,6 @@
 - **駆動される側アダプター**: ドメインから呼び出される
   - MySqlOrderRepository: 注文データの永続化
   - MySqlInventoryRepository: 在庫データの永続化
-  - ConsoleEventPublisher: ドメインイベント発行
 
 ## 依存性の方向
 
@@ -92,12 +90,11 @@
 ### SOLID原則の適用
 
 1. **単一責任原則 (SRP)**: 各モジュールは単一の責任を持つ
-   - Order集約は注文管理のみ
-   - Inventory集約は在庫管理のみ
+   - 注文集約は注文管理のみ
+   - 在庫集約は在庫管理のみ
    - InventoryServiceは在庫予約・解放のみ
 
 2. **開放閉鎖原則 (OCP)**: 拡張に開いて、修正に閉じている
-   - 新しいEventPublisher実装（例：メール通知）を追加可能
    - 新しいRepository実装（例：PostgreSQL）を追加可能
 
 3. **リスコフ置換原則 (LSP)**: 実装は抽象化と置換可能

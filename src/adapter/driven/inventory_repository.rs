@@ -1,6 +1,6 @@
-use crate::domain::model::{Inventory, BookId};
-use crate::domain::port::{InventoryRepository, RepositoryError};
 use crate::adapter::database_error::DatabaseError;
+use crate::domain::model::{BookId, Inventory};
+use crate::domain::port::{InventoryRepository, RepositoryError};
 use async_trait::async_trait;
 
 // MySQL関連のインポート
@@ -15,10 +15,10 @@ pub struct MySqlInventoryRepository {
 
 impl MySqlInventoryRepository {
     /// 新しいMySQL在庫リポジトリを作成
-    /// 
+    ///
     /// # Arguments
     /// * `pool` - MySQLコネクションプール
-    /// 
+    ///
     /// # Returns
     /// * MySqlInventoryRepositoryのインスタンス
     pub fn new(pool: Pool<MySql>) -> Self {
@@ -36,7 +36,7 @@ impl InventoryRepository for MySqlInventoryRepository {
             VALUES (?, ?)
             ON DUPLICATE KEY UPDATE
                 quantity_on_hand = VALUES(quantity_on_hand)
-            "#
+            "#,
         )
         .bind(inventory.book_id().to_string())
         .bind(inventory.quantity_on_hand())
@@ -50,18 +50,20 @@ impl InventoryRepository for MySqlInventoryRepository {
 
     async fn find_by_book_id(&self, book_id: BookId) -> Result<Option<Inventory>, RepositoryError> {
         // inventoriesテーブルから在庫を取得
-        let row = sqlx::query("SELECT book_id, quantity_on_hand FROM inventories WHERE book_id = ?")
-            .bind(book_id.to_string())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| DatabaseError::QueryError(format!("在庫の取得に失敗しました: {}", e)))
-        .map_err(RepositoryError::from)?;
+        let row =
+            sqlx::query("SELECT book_id, quantity_on_hand FROM inventories WHERE book_id = ?")
+                .bind(book_id.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| DatabaseError::QueryError(format!("在庫の取得に失敗しました: {}", e)))
+                .map_err(RepositoryError::from)?;
 
         match row {
             Some(row) => {
-                let book_id = BookId::from_string(row.get("book_id"))
-                    .map_err(|e| RepositoryError::FetchFailed(format!("書籍IDの解析に失敗しました: {}", e)))?;
-                
+                let book_id = BookId::from_string(row.get("book_id")).map_err(|e| {
+                    RepositoryError::FetchFailed(format!("書籍IDの解析に失敗しました: {}", e))
+                })?;
+
                 let inventory = Inventory::new(book_id, row.get::<u32, _>("quantity_on_hand"));
                 Ok(Some(inventory))
             }
@@ -72,17 +74,21 @@ impl InventoryRepository for MySqlInventoryRepository {
     async fn find_all(&self) -> Result<Vec<Inventory>, RepositoryError> {
         // inventoriesテーブルからすべての在庫を取得
         // 書籍IDの昇順で並べる
-        let rows = sqlx::query("SELECT book_id, quantity_on_hand FROM inventories ORDER BY book_id ASC")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| DatabaseError::QueryError(format!("在庫一覧の取得に失敗しました: {}", e)))
-            .map_err(RepositoryError::from)?;
+        let rows =
+            sqlx::query("SELECT book_id, quantity_on_hand FROM inventories ORDER BY book_id ASC")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| {
+                    DatabaseError::QueryError(format!("在庫一覧の取得に失敗しました: {}", e))
+                })
+                .map_err(RepositoryError::from)?;
 
         let mut inventories = Vec::new();
         for row in rows {
-            let book_id = BookId::from_string(row.get("book_id"))
-                .map_err(|e| RepositoryError::FetchFailed(format!("書籍IDの解析に失敗しました: {}", e)))?;
-            
+            let book_id = BookId::from_string(row.get("book_id")).map_err(|e| {
+                RepositoryError::FetchFailed(format!("書籍IDの解析に失敗しました: {}", e))
+            })?;
+
             let inventory = Inventory::new(book_id, row.get::<u32, _>("quantity_on_hand"));
             inventories.push(inventory);
         }
@@ -90,7 +96,10 @@ impl InventoryRepository for MySqlInventoryRepository {
         Ok(inventories)
     }
 
-    async fn find_by_max_quantity(&self, max_quantity: u32) -> Result<Vec<Inventory>, RepositoryError> {
+    async fn find_by_max_quantity(
+        &self,
+        max_quantity: u32,
+    ) -> Result<Vec<Inventory>, RepositoryError> {
         // 指定された最大在庫数以下の在庫を取得
         // 書籍IDの昇順で並べる
         let rows = sqlx::query(
@@ -104,9 +113,10 @@ impl InventoryRepository for MySqlInventoryRepository {
 
         let mut inventories = Vec::new();
         for row in rows {
-            let book_id = BookId::from_string(row.get("book_id"))
-                .map_err(|e| RepositoryError::FetchFailed(format!("書籍IDの解析に失敗しました: {}", e)))?;
-            
+            let book_id = BookId::from_string(row.get("book_id")).map_err(|e| {
+                RepositoryError::FetchFailed(format!("書籍IDの解析に失敗しました: {}", e))
+            })?;
+
             let inventory = Inventory::new(book_id, row.get::<u32, _>("quantity_on_hand"));
             inventories.push(inventory);
         }

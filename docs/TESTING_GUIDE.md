@@ -13,7 +13,7 @@
 **実装済み対象**:
 - 値オブジェクト（Money, OrderLine, ShippingAddress等）
 - エンティティ（Order, Inventory）
-- アダプター（EventPublisher, ResponseDTO）
+- アダプター（ResponseDTO）
 - 設定（DatabaseConfig）
 
 **特徴**:

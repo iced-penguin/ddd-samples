@@ -53,23 +53,21 @@ mod tests {
         let request = CreateOrderRequest {
             customer_id: Some(Uuid::new_v4()),
         };
-        
+
         let json = serde_json::to_string(&request).unwrap();
         let _deserialized: CreateOrderRequest = serde_json::from_str(&json).unwrap();
-        
+
         // シリアライゼーション/デシリアライゼーションが成功することを確認
         assert!(json.contains("customer_id"));
     }
 
     #[test]
     fn test_create_order_request_without_customer_id() {
-        let request = CreateOrderRequest {
-            customer_id: None,
-        };
-        
+        let request = CreateOrderRequest { customer_id: None };
+
         let json = serde_json::to_string(&request).unwrap();
         let _deserialized: CreateOrderRequest = serde_json::from_str(&json).unwrap();
-        
+
         // customer_idがnullでシリアライズされることを確認
         assert!(json.contains("null"));
     }
@@ -82,10 +80,10 @@ mod tests {
             quantity: 2,
             unit_price: 1500,
         };
-        
+
         let json = serde_json::to_string(&request).unwrap();
         let _deserialized: AddBookRequest = serde_json::from_str(&json).unwrap();
-        
+
         // 必要なフィールドがシリアライズされることを確認
         assert!(json.contains("book_id"));
         assert!(json.contains("quantity"));
@@ -101,10 +99,10 @@ mod tests {
             address_line1: "道玄坂1-1-1".to_string(),
             address_line2: Some("ビル名".to_string()),
         };
-        
+
         let json = serde_json::to_string(&request).unwrap();
         let _deserialized: SetShippingAddressRequest = serde_json::from_str(&json).unwrap();
-        
+
         // 必要なフィールドがシリアライズされることを確認
         assert!(json.contains("postal_code"));
         assert!(json.contains("prefecture"));
@@ -122,10 +120,10 @@ mod tests {
             address_line1: "道玄坂1-1-1".to_string(),
             address_line2: None,
         };
-        
+
         let json = serde_json::to_string(&request).unwrap();
         let _deserialized: SetShippingAddressRequest = serde_json::from_str(&json).unwrap();
-        
+
         // address_line2がnullでシリアライズされることを確認
         assert!(json.contains("null"));
     }
@@ -137,10 +135,10 @@ mod tests {
             book_id,
             quantity: 50,
         };
-        
+
         let json = serde_json::to_string(&request).unwrap();
         let _deserialized: CreateInventoryRequest = serde_json::from_str(&json).unwrap();
-        
+
         // 必要なフィールドがシリアライズされることを確認
         assert!(json.contains("book_id"));
         assert!(json.contains("quantity"));
@@ -149,14 +147,18 @@ mod tests {
     #[test]
     fn test_query_params_deserialization() {
         // OrdersQueryParams のテスト
-        let params = OrdersQueryParams { status: Some("Pending".to_string()) };
+        let params = OrdersQueryParams {
+            status: Some("Pending".to_string()),
+        };
         assert_eq!(params.status, Some("Pending".to_string()));
 
         let params = OrdersQueryParams { status: None };
         assert_eq!(params.status, None);
 
         // InventoryQueryParams のテスト
-        let params = InventoryQueryParams { max_quantity: Some(10) };
+        let params = InventoryQueryParams {
+            max_quantity: Some(10),
+        };
         assert_eq!(params.max_quantity, Some(10));
 
         let params = InventoryQueryParams { max_quantity: None };

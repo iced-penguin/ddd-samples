@@ -1,5 +1,9 @@
-pub mod model;
-pub mod event;
-pub mod service;
-pub mod port;
 pub mod error;
+pub mod event;
+pub mod event_bus;
+pub mod handler;
+pub mod logging;
+pub mod model;
+pub mod port;
+pub mod serialization;
+pub mod service;

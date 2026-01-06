@@ -1,7 +1,7 @@
-use proptest::prelude::*;
 use bookstore_order_management::domain::model::{
-    Money, OrderLine, BookId, OrderId, CustomerId, Order, Inventory, ShippingAddress
+    BookId, CustomerId, Inventory, Money, Order, OrderId, OrderLine, ShippingAddress,
 };
+use proptest::prelude::*;
 
 // Money のプロパティベーステスト
 proptest! {
@@ -13,10 +13,10 @@ proptest! {
     ) {
         let money1 = Money::jpy(amount1);
         let money2 = Money::jpy(amount2);
-        
+
         let result1 = money1.add(&money2).unwrap();
         let result2 = money2.add(&money1).unwrap();
-        
+
         prop_assert_eq!(result1, result2);
     }
 
@@ -30,10 +30,10 @@ proptest! {
         let money1 = Money::jpy(amount1);
         let money2 = Money::jpy(amount2);
         let money3 = Money::jpy(amount3);
-        
+
         let result1 = money1.add(&money2).unwrap().add(&money3).unwrap();
         let result2 = money1.add(&money2.add(&money3).unwrap()).unwrap();
-        
+
         prop_assert_eq!(result1, result2);
     }
 
@@ -45,10 +45,10 @@ proptest! {
         factor2 in 1u32..100,
     ) {
         let money = Money::jpy(base_amount);
-        
+
         let left_side = money.multiply(factor1 + factor2);
         let right_side = money.multiply(factor1).add(&money.multiply(factor2)).unwrap();
-        
+
         prop_assert_eq!(left_side, right_side);
     }
 
@@ -59,7 +59,7 @@ proptest! {
     ) {
         let money = Money::jpy(amount);
         let result = money.multiply(0);
-        
+
         prop_assert_eq!(result, Money::jpy(0));
     }
 
@@ -70,7 +70,7 @@ proptest! {
     ) {
         let money = Money::jpy(amount);
         let result = money.multiply(1);
-        
+
         prop_assert_eq!(result, money);
     }
 }
@@ -86,7 +86,7 @@ proptest! {
         let book_id = BookId::new();
         let price = Money::jpy(unit_price);
         let line = OrderLine::new(book_id, quantity, price).unwrap();
-        
+
         let expected_subtotal = price.multiply(quantity);
         prop_assert_eq!(line.subtotal(), expected_subtotal);
     }
@@ -101,7 +101,7 @@ proptest! {
         let book_id = BookId::new();
         let price = Money::jpy(unit_price);
         let mut line = OrderLine::new(book_id, initial_quantity, price).unwrap();
-        
+
         let result = line.increase_quantity(additional_quantity);
         prop_assert!(result.is_ok());
         prop_assert_eq!(line.quantity(), initial_quantity + additional_quantity);
@@ -116,7 +116,7 @@ proptest! {
         let book_id = BookId::new();
         let price = Money::jpy(unit_price);
         let mut line = OrderLine::new(book_id, initial_quantity, price).unwrap();
-        
+
         let result = line.increase_quantity(0);
         prop_assert!(result.is_err());
         prop_assert_eq!(line.quantity(), initial_quantity); // 数量は変わらない
@@ -133,14 +133,14 @@ proptest! {
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
         let mut order = Order::new(order_id, customer_id);
-        
+
         // 複数の書籍を追加
         for (quantity, unit_price) in book_data {
             let book_id = BookId::new();
             let price = Money::jpy(unit_price);
             order.add_book(book_id, quantity, price).unwrap();
         }
-        
+
         let total = order.calculate_total();
         prop_assert!(total.amount() >= 0);
     }
@@ -153,9 +153,9 @@ proptest! {
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
         let mut order = Order::new(order_id, customer_id);
-        
+
         let mut expected_subtotal = 0i64;
-        
+
         // 複数の書籍を追加して期待される小計を計算
         for (quantity, unit_price) in book_data {
             let book_id = BookId::new();
@@ -163,11 +163,11 @@ proptest! {
             order.add_book(book_id, quantity, price).unwrap();
             expected_subtotal += unit_price * (quantity as i64);
         }
-        
+
         // 配送料の計算
         let expected_shipping_fee = if expected_subtotal >= 10_000 { 0 } else { 500 };
         let expected_total = expected_subtotal + expected_shipping_fee;
-        
+
         let actual_total = order.calculate_total();
         prop_assert_eq!(actual_total.amount(), expected_total);
     }
@@ -181,16 +181,16 @@ proptest! {
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
         let mut order = Order::new(order_id, customer_id);
-        
+
         let book_id = BookId::new();
         let price = Money::jpy(unit_price);
         let expected_total_quantity: u32 = quantities.iter().sum();
-        
+
         // 同じ書籍を複数回追加
         for quantity in quantities {
             order.add_book(book_id, quantity, price).unwrap();
         }
-        
+
         // 注文明細は1つだけで、数量が累積されている
         prop_assert_eq!(order.order_lines().len(), 1);
         prop_assert_eq!(order.order_lines()[0].quantity(), expected_total_quantity);
@@ -205,14 +205,14 @@ proptest! {
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
         let mut order = Order::new(order_id, customer_id);
-        
+
         // 条件に応じて注文明細を追加
         if has_order_lines {
             let book_id = BookId::new();
             let price = Money::jpy(1000);
             order.add_book(book_id, 1, price).unwrap();
         }
-        
+
         // 条件に応じて配送先住所を設定
         if has_shipping_address {
             let address = ShippingAddress::new(
@@ -224,9 +224,9 @@ proptest! {
             ).unwrap();
             order.set_shipping_address(address);
         }
-        
+
         let result = order.confirm();
-        
+
         // 両方の条件が満たされている場合のみ成功
         if has_order_lines && has_shipping_address {
             prop_assert!(result.is_ok());
@@ -246,12 +246,12 @@ proptest! {
     ) {
         let book_id = BookId::new();
         let mut inventory = Inventory::new(book_id, initial_quantity);
-        
+
         // 予約
         let reserve_result = inventory.reserve(reserve_quantity);
         prop_assert!(reserve_result.is_ok());
         prop_assert_eq!(inventory.quantity_on_hand(), initial_quantity - reserve_quantity);
-        
+
         // 解放
         let release_result = inventory.release(reserve_quantity);
         prop_assert!(release_result.is_ok());
@@ -267,9 +267,9 @@ proptest! {
         let book_id = BookId::new();
         let mut inventory = Inventory::new(book_id, initial_quantity);
         let original_quantity = inventory.quantity_on_hand();
-        
+
         let result = inventory.reserve(reserve_quantity);
-        
+
         if reserve_quantity <= initial_quantity {
             prop_assert!(result.is_ok());
             prop_assert_eq!(inventory.quantity_on_hand(), initial_quantity - reserve_quantity);
@@ -287,10 +287,10 @@ proptest! {
     ) {
         let book_id = BookId::new();
         let inventory = Inventory::new(book_id, initial_quantity);
-        
+
         let has_stock = inventory.has_available_stock(check_quantity);
         let expected = check_quantity <= initial_quantity;
-        
+
         prop_assert_eq!(has_stock, expected);
     }
 
@@ -302,7 +302,7 @@ proptest! {
     ) {
         let book_id = BookId::new();
         let mut inventory = Inventory::new(book_id, initial_quantity);
-        
+
         let result = inventory.release(release_quantity);
         prop_assert!(result.is_ok());
         prop_assert_eq!(inventory.quantity_on_hand(), initial_quantity + release_quantity);
@@ -326,10 +326,10 @@ proptest! {
             street.clone(),
             None,
         );
-        
+
         // 7桁の数字の郵便番号は常に有効
         prop_assert!(result.is_ok());
-        
+
         let address = result.unwrap();
         prop_assert_eq!(address.postal_code(), postal_code);
         prop_assert_eq!(address.prefecture(), prefecture);
@@ -353,7 +353,7 @@ proptest! {
             street,
             None,
         );
-        
+
         // 無効な郵便番号は拒否される
         prop_assert!(result.is_err());
     }
@@ -369,7 +369,7 @@ proptest! {
         let prefecture = if prefecture_empty { "".to_string() } else { "東京都".to_string() };
         let city = if city_empty { "".to_string() } else { "渋谷区".to_string() };
         let street = if street_empty { "".to_string() } else { "道玄坂1-1-1".to_string() };
-        
+
         let result = ShippingAddress::new(
             postal_code,
             prefecture,
@@ -377,7 +377,7 @@ proptest! {
             street,
             None,
         );
-        
+
         // いずれかのフィールドが空の場合は拒否される
         if prefecture_empty || city_empty || street_empty {
             prop_assert!(result.is_err());

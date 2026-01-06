@@ -1,17 +1,16 @@
 use crate::domain::error::DomainError;
-use crate::domain::port::{RepositoryError, PublisherError};
+use crate::domain::port::RepositoryError;
 
 /// アプリケーション層のエラー型
 /// ドメインエラー、リポジトリエラー、イベント発行エラーをラップする
-/// 要件: すべて
 #[derive(Debug)]
 pub enum ApplicationError {
     /// ドメインエラー（ビジネスルール違反）
     DomainError(DomainError),
     /// リポジトリエラー（永続化の失敗）
     RepositoryError(RepositoryError),
-    /// イベント発行エラー
-    PublisherError(PublisherError),
+    /// イベントバス発行エラー
+    EventPublishingFailed(String),
     /// エンティティが見つからない
     NotFound(String),
 }
@@ -21,7 +20,9 @@ impl std::fmt::Display for ApplicationError {
         match self {
             ApplicationError::DomainError(err) => write!(f, "Domain error: {}", err),
             ApplicationError::RepositoryError(err) => write!(f, "Repository error: {}", err),
-            ApplicationError::PublisherError(err) => write!(f, "Publisher error: {}", err),
+            ApplicationError::EventPublishingFailed(msg) => {
+                write!(f, "Event publishing failed: {}", msg)
+            }
             ApplicationError::NotFound(msg) => write!(f, "Not found: {}", msg),
         }
     }
@@ -39,11 +40,5 @@ impl From<DomainError> for ApplicationError {
 impl From<RepositoryError> for ApplicationError {
     fn from(err: RepositoryError) -> Self {
         ApplicationError::RepositoryError(err)
-    }
-}
-
-impl From<PublisherError> for ApplicationError {
-    fn from(err: PublisherError) -> Self {
-        ApplicationError::PublisherError(err)
     }
 }

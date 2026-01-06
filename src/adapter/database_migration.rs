@@ -1,5 +1,5 @@
-use sqlx::{MySql, Pool};
 use crate::adapter::database_error::DatabaseError;
+use sqlx::{MySql, Pool};
 
 /// データベースマイグレーションを管理する構造体
 pub struct DatabaseMigration {
@@ -28,7 +28,9 @@ impl DatabaseMigration {
             sqlx::query(migration_sql)
                 .execute(&self.pool)
                 .await
-                .map_err(|e| DatabaseError::MigrationError(format!("Migration {} failed: {}", index + 1, e)))?;
+                .map_err(|e| {
+                    DatabaseError::MigrationError(format!("Migration {} failed: {}", index + 1, e))
+                })?;
             println!("Migration {} completed successfully", index + 1);
         }
 

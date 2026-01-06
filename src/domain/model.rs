@@ -1,16 +1,12 @@
 // ドメインモデル（エンティティと値オブジェクト）
 
-mod value_objects;
-mod order;
 mod inventory;
+mod order;
+mod value_objects;
 
 pub use value_objects::{
-    OrderId, BookId, CustomerId,
-    Money, 
-    OrderLine,
-    ShippingAddress,
-    OrderStatus,
+    BookId, CustomerId, Money, OrderId, OrderLine, OrderStatus, ShippingAddress,
 };
 
-pub use order::Order;
 pub use inventory::Inventory;
+pub use order::Order;
