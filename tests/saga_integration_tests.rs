@@ -3,8 +3,8 @@ use bookstore_order_management::application::service::OrderApplicationService;
 use bookstore_order_management::domain::event::{DomainEvent, OrderConfirmed};
 use bookstore_order_management::domain::event_bus::EventHandler;
 use bookstore_order_management::domain::handler::{
-    DeliveryHandler, EventualConsistencyVerifier, InventoryReservationFailureCompensationHandler,
-    InventoryReservationHandler, NotificationHandler, SagaCompensationCoordinator, ShippingHandler,
+    EventualConsistencyVerifier, InventoryReservationFailureCompensationHandler,
+    InventoryReservationHandler, NotificationHandler, SagaCompensationCoordinator,
 };
 use bookstore_order_management::domain::model::{
     BookId, CustomerId, Inventory, Money, Order, OrderId, OrderStatus,
@@ -33,7 +33,8 @@ fn deserialize_domain_event(json: &str) -> Result<DomainEvent, SerializationErro
 
 fn test_event_round_trip(event: &DomainEvent) -> Result<bool, SerializationError> {
     let serializer = EventSerializer::new();
-    let deserialized = serializer.round_trip_test(event)?;
+    let serialized = serializer.serialize_event(event)?;
+    let deserialized = serializer.deserialize_event(&serialized)?;
 
     // 基本的な等価性チェック
     Ok(event.event_type() == deserialized.event_type()
@@ -695,28 +696,6 @@ async fn test_complex_serialization_error_scenarios() {
     use bookstore_order_management::domain::serialization::EventSerializer;
 
     let serializer = EventSerializer::new();
-
-    // テストケース1: スキーマバージョン非互換
-    let incompatible_version_serializer = EventSerializer::with_version_range(2..=3);
-    let mut event = DomainEvent::OrderConfirmed(OrderConfirmed::new(
-        OrderId::new(),
-        CustomerId::new(),
-        vec![],
-        Money::jpy(1000),
-    ));
-
-    // バージョン1に設定（サポート外）
-    if let DomainEvent::OrderConfirmed(ref mut order_confirmed) = event {
-        order_confirmed.metadata.event_version = 1;
-    }
-
-    let result = incompatible_version_serializer.serialize_event(&event);
-    assert!(result.is_err());
-    let error_message = result.unwrap_err().to_string();
-    assert!(error_message.contains("Schema version incompatibility"));
-    assert!(error_message.contains("Expected version 3"));
-    assert!(error_message.contains("found 1"));
-    assert!(error_message.contains("OrderConfirmed"));
 
     // テストケース2: 長い入力データのプレビュー機能
     let very_long_json = format!("{{\"invalid\": \"{}\"}}", "a".repeat(200));

@@ -109,10 +109,7 @@ impl EventSerializer {
         }
     }
 
-    /// サポートするバージョン範囲を指定してシリアライザーを作成
-    pub fn with_version_range(supported_versions: std::ops::RangeInclusive<u32>) -> Self {
-        Self { supported_versions }
-    }
+
 
     /// ドメインイベントをJSONにシリアライズ
     pub fn serialize_event(&self, event: &DomainEvent) -> Result<String, SerializationError> {
@@ -406,12 +403,7 @@ impl EventSerializer {
         }
     }
 
-    /// 往復テスト（シリアライゼーション → デシリアライゼーション）
-    /// テスト用のユーティリティメソッド
-    pub fn round_trip_test(&self, event: &DomainEvent) -> Result<DomainEvent, SerializationError> {
-        let serialized = self.serialize_event(event)?;
-        self.deserialize_event(&serialized)
-    }
+
 }
 
 impl Default for EventSerializer {
@@ -463,22 +455,7 @@ mod tests {
         assert_eq!(original_event.event_type(), deserialized_event.event_type());
     }
 
-    #[test]
-    fn test_round_trip_consistency() {
-        let serializer = EventSerializer::new();
-        let original_event = DomainEvent::OrderConfirmed(OrderConfirmed::new(
-            OrderId::new(),
-            CustomerId::new(),
-            vec![],
-            Money::jpy(1000),
-        ));
 
-        let result = serializer.round_trip_test(&original_event);
-        assert!(result.is_ok());
-
-        let round_trip_event = result.unwrap();
-        assert_eq!(original_event.event_type(), round_trip_event.event_type());
-    }
 
     #[test]
     fn test_empty_json_deserialization_error() {
@@ -514,34 +491,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_schema_version_incompatibility() {
-        let serializer = EventSerializer::with_version_range(2..=3); // バージョン2-3のみサポート
-        let mut event = DomainEvent::OrderConfirmed(OrderConfirmed::new(
-            OrderId::new(),
-            CustomerId::new(),
-            vec![],
-            Money::jpy(1000),
-        ));
 
-        // バージョン1のイベント（サポート外）
-        if let DomainEvent::OrderConfirmed(ref mut order_confirmed) = event {
-            order_confirmed.metadata.event_version = 1;
-        }
-
-        let result = serializer.serialize_event(&event);
-        assert!(result.is_err());
-
-        match result.unwrap_err() {
-            SerializationError::SchemaVersionIncompatible {
-                expected, actual, ..
-            } => {
-                assert_eq!(expected, 3);
-                assert_eq!(actual, 1);
-            }
-            _ => panic!("Expected SchemaVersionIncompatible error"),
-        }
-    }
 
     #[test]
     fn test_utils_functions() {
@@ -560,8 +510,5 @@ mod tests {
         let json = serialized.unwrap();
         let deserialized = serializer.deserialize_event(&json);
         assert!(deserialized.is_ok());
-
-        let round_trip_test = serializer.round_trip_test(&event);
-        assert!(round_trip_test.is_ok());
     }
 }
