@@ -105,10 +105,6 @@ where
             name: "OrderCancelledHandler".to_string(),
         }
     }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]
@@ -156,10 +152,6 @@ where
             handler,
             name: "OrderShippedHandler".to_string(),
         }
-    }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
     }
 }
 
@@ -209,10 +201,6 @@ where
             name: "OrderDeliveredHandler".to_string(),
         }
     }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]
@@ -261,10 +249,6 @@ where
             name: "InventoryReservedHandler".to_string(),
         }
     }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]
@@ -307,16 +291,6 @@ impl<H> InventoryReleasedHandlerWrapper<H>
 where
     H: EventHandler<crate::domain::event::InventoryReleased>,
 {
-    pub fn new(handler: H) -> Self {
-        Self {
-            handler,
-            name: "InventoryReleasedHandler".to_string(),
-        }
-    }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]
@@ -367,10 +341,6 @@ where
             name: "InventoryReservationFailedHandler".to_string(),
         }
     }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]
@@ -418,10 +388,6 @@ where
             handler,
             name: "ShippingFailedHandler".to_string(),
         }
-    }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
     }
 }
 
@@ -471,10 +437,6 @@ where
             name: "DeliveryFailedHandler".to_string(),
         }
     }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]
@@ -523,10 +485,6 @@ where
             name: "SagaCompensationStartedHandler".to_string(),
         }
     }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]
@@ -574,10 +532,6 @@ where
             handler,
             name: "SagaCompensationCompletedHandler".to_string(),
         }
-    }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
     }
 }
 

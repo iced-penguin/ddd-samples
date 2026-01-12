@@ -349,26 +349,6 @@ impl EventLogger {
         println!("{}", entry.format());
     }
 
-    /// デバッグログ（開発時のみ使用）
-    pub fn log_debug(component: &str, message: &str, correlation_id: Option<Uuid>) {
-        #[cfg(debug_assertions)]
-        {
-            let mut entry =
-                LogEntry::new(LogLevel::Debug, message.to_string(), component.to_string());
-
-            if let Some(corr_id) = correlation_id {
-                entry = entry.with_correlation_id(corr_id);
-            }
-
-            println!("{}", entry.format());
-        }
-
-        // リリースビルドでは何もしない
-        #[cfg(not(debug_assertions))]
-        {
-            let _ = (component, message, correlation_id);
-        }
-    }
 }
 
 #[cfg(test)]

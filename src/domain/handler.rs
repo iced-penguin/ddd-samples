@@ -22,6 +22,12 @@ pub struct ProcessedEventTracker {
     processed_events: Arc<Mutex<HashSet<Uuid>>>,
 }
 
+impl Default for ProcessedEventTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProcessedEventTracker {
     pub fn new() -> Self {
         Self {
@@ -39,12 +45,6 @@ impl ProcessedEventTracker {
     pub async fn mark_processed(&self, event_id: Uuid) {
         let mut processed = self.processed_events.lock().await;
         processed.insert(event_id);
-    }
-
-    /// イベントの処理済みマークを削除（テスト用）
-    pub async fn remove_processed(&self, event_id: Uuid) {
-        let mut processed = self.processed_events.lock().await;
-        processed.remove(&event_id);
     }
 }
 
@@ -478,7 +478,7 @@ impl EventHandler<OrderShipped> for NotificationHandler {
         let message = format!(
             "ご注文が発送されました。注文ID: {:?}, 配送先: {}",
             event.order_id,
-            format!(
+            format_args!(
                 "{} {} {}",
                 event.shipping_address.prefecture(),
                 event.shipping_address.city(),
@@ -722,6 +722,7 @@ impl EventHandler<OrderShipped> for DeliveryHandler {
 /// DeliveryFailedイベントを受信して発送状態を元に戻す
 pub struct DeliveryFailureCompensationHandler {
     order_repository: Arc<dyn OrderRepository>,
+    #[allow(dead_code)]
     event_bus: Arc<dyn EventBus>,
 }
 
@@ -745,7 +746,7 @@ impl EventHandler<crate::domain::event::DeliveryFailed> for DeliveryFailureCompe
         EventLogger::log_compensation_action(
             "DeliveryFailure",
             event.metadata.correlation_id,
-            &event.order_id.to_string(),
+            &format!("{}", event.order_id),
             std::time::Duration::from_millis(0), // 開始時点なので0
         );
 
@@ -774,7 +775,7 @@ impl EventHandler<crate::domain::event::DeliveryFailed> for DeliveryFailureCompe
                 "DeliveryFailureCompensationHandler",
                 &format!(
                     "Order {} delivery compensation: reverting to shipped status",
-                    event.order_id.to_string()
+                    event.order_id
                 ),
                 Some(event.metadata.correlation_id),
                 None,
@@ -786,7 +787,7 @@ impl EventHandler<crate::domain::event::DeliveryFailed> for DeliveryFailureCompe
         EventLogger::log_compensation_action(
             "DeliveryFailure",
             event.metadata.correlation_id,
-            &event.order_id.to_string(),
+            &format!("{}", event.order_id),
             execution_time,
         );
 
@@ -849,7 +850,7 @@ impl EventualConsistencyVerifier {
                         EventLogger::log_error(
                             "EventualConsistencyVerifier",
                             &format!("Inconsistency detected: Order {} requires {} units of book {:?}, but only {} available",
-                                order_id.to_string(),
+                                order_id,
                                 order_line.quantity(),
                                 order_line.book_id(),
                                 inventory.quantity_on_hand()
@@ -864,7 +865,7 @@ impl EventualConsistencyVerifier {
                         &format!(
                             "Inconsistency detected: No inventory found for book {:?} in order {}",
                             order_line.book_id(),
-                            order_id.to_string()
+                            order_id
                         ),
                         Some(correlation_id),
                         None,
@@ -888,7 +889,7 @@ impl EventHandler<OrderConfirmed> for EventualConsistencyVerifier {
             "EventualConsistencyVerifier",
             &format!(
                 "Consistency verification completed for confirmed order {}",
-                event.order_id.to_string()
+                event.order_id
             ),
             Some(event.metadata.correlation_id),
             None,
@@ -909,7 +910,7 @@ impl EventHandler<OrderDelivered> for EventualConsistencyVerifier {
             "EventualConsistencyVerifier",
             &format!(
                 "Consistency verification completed for delivered order {}",
-                event.order_id.to_string()
+                event.order_id
             ),
             Some(event.metadata.correlation_id),
             None,
@@ -919,7 +920,7 @@ impl EventHandler<OrderDelivered> for EventualConsistencyVerifier {
         EventLogger::log_saga_step_completed(
             event.metadata.correlation_id,
             "delivery",
-            &event.order_id.to_string(),
+            &format!("{}", event.order_id),
             std::time::Duration::from_millis(0), // 実際の実装では適切な実行時間を計測
         );
 
@@ -1483,7 +1484,6 @@ mod tests {
             order_repo.clone(),
             event_bus.clone(),
         );
-        let notification_handler = NotificationHandler::new();
 
         // テスト用の在庫を追加（十分な在庫を確保）
         let book_id = BookId::new();
@@ -1733,7 +1733,7 @@ impl EventHandler<InventoryReservationFailed> for InventoryReservationFailureCom
         EventLogger::log_compensation_action(
             "InventoryReservationFailure",
             event.metadata.correlation_id,
-            &event.order_id.to_string(),
+            &format!("{}", event.order_id),
             std::time::Duration::from_millis(0), // 開始時点なので0
         );
 
@@ -1781,7 +1781,7 @@ impl EventHandler<InventoryReservationFailed> for InventoryReservationFailureCom
         EventLogger::log_compensation_action(
             "InventoryReservationFailure",
             event.metadata.correlation_id,
-            &event.order_id.to_string(),
+            &format!("{}", event.order_id),
             execution_time,
         );
 
@@ -1819,7 +1819,7 @@ impl EventHandler<ShippingFailed> for ShippingFailureCompensationHandler {
         EventLogger::log_compensation_action(
             "ShippingFailure",
             event.metadata.correlation_id,
-            &event.order_id.to_string(),
+            &format!("{}", event.order_id),
             std::time::Duration::from_millis(0), // 開始時点なので0
         );
 
@@ -1889,7 +1889,7 @@ impl EventHandler<ShippingFailed> for ShippingFailureCompensationHandler {
         EventLogger::log_compensation_action(
             "ShippingFailure",
             event.metadata.correlation_id,
-            &event.order_id.to_string(),
+            &format!("{}", event.order_id),
             execution_time,
         );
 
@@ -1897,6 +1897,7 @@ impl EventHandler<ShippingFailed> for ShippingFailureCompensationHandler {
     }
 }
 
+/// サーガ補償コーディネーター
 /// サーガ補償コーディネーター
 /// サーガの失敗を検出し、補償プロセスを開始する
 pub struct SagaCompensationCoordinator {

@@ -2,6 +2,8 @@ use crate::domain::error::DomainError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use std::fmt;
+
 /// 注文の一意識別子
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OrderId(Uuid);
@@ -27,10 +29,11 @@ impl OrderId {
     pub fn as_uuid(&self) -> Uuid {
         self.0
     }
+}
 
-    /// 文字列として取得
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
+impl fmt::Display for OrderId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -60,10 +63,11 @@ impl BookId {
         let uuid = Uuid::parse_str(s)?;
         Ok(Self(uuid))
     }
+}
 
-    /// 文字列として取得
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
+impl fmt::Display for BookId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -98,10 +102,11 @@ impl CustomerId {
     pub fn as_uuid(&self) -> Uuid {
         self.0
     }
+}
 
-    /// 文字列として取得
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
+impl fmt::Display for CustomerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -115,6 +120,7 @@ impl Default for CustomerId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Currency {
     /// 日本円
+    #[allow(clippy::upper_case_acronyms)]
     JPY,
 }
 
@@ -333,6 +339,19 @@ pub enum OrderStatus {
     Cancelled,
 }
 
+impl fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let status_str = match self {
+            OrderStatus::Pending => "Pending",
+            OrderStatus::Confirmed => "Confirmed",
+            OrderStatus::Shipped => "Shipped",
+            OrderStatus::Delivered => "Delivered",
+            OrderStatus::Cancelled => "Cancelled",
+        };
+        write!(f, "{}", status_str)
+    }
+}
+
 impl OrderStatus {
     /// 文字列からOrderStatusを作成
     pub fn from_string(s: &str) -> Result<Self, DomainError> {
@@ -346,17 +365,6 @@ impl OrderStatus {
                 "無効な注文ステータス: {}",
                 s
             ))),
-        }
-    }
-
-    /// 文字列として取得
-    pub fn to_string(&self) -> String {
-        match self {
-            OrderStatus::Pending => "Pending".to_string(),
-            OrderStatus::Confirmed => "Confirmed".to_string(),
-            OrderStatus::Shipped => "Shipped".to_string(),
-            OrderStatus::Delivered => "Delivered".to_string(),
-            OrderStatus::Cancelled => "Cancelled".to_string(),
         }
     }
 }

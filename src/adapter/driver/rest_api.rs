@@ -418,13 +418,6 @@ fn map_domain_error(domain_err: crate::domain::error::DomainError) -> (StatusCod
                 code: "CURRENCY_MISMATCH".to_string(),
             }),
         ),
-        DomainError::RepositoryError(msg) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiError {
-                error: msg,
-                code: "REPOSITORY_ERROR".to_string(),
-            }),
-        ),
     }
 }
 

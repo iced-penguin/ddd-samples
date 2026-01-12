@@ -16,7 +16,7 @@ impl DatabaseMigration {
     /// べき等性を保証（CREATE TABLE IF NOT EXISTS）
     pub async fn run(&self) -> Result<(), DatabaseError> {
         // マイグレーションファイルのリスト
-        let migrations = vec![
+        let migrations = [
             include_str!("../../migrations/001_create_orders_table.sql"),
             include_str!("../../migrations/002_create_order_lines_table.sql"),
             include_str!("../../migrations/003_create_inventories_table.sql"),

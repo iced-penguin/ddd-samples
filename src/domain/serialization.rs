@@ -292,7 +292,7 @@ impl EventSerializer {
         })?;
 
         // 必須フィールドの存在確認
-        if !parsed.get("event_type").is_some() {
+        if parsed.get("event_type").is_none() {
             return Err(SerializationError::json_serialization_failed(
                 "Missing event_type field in serialized JSON".to_string(),
                 original_event.event_type().to_string(),
@@ -300,7 +300,7 @@ impl EventSerializer {
             ));
         }
 
-        if !parsed.get("event_data").is_some() {
+        if parsed.get("event_data").is_none() {
             return Err(SerializationError::json_serialization_failed(
                 "Missing event_data field in serialized JSON".to_string(),
                 original_event.event_type().to_string(),
@@ -417,34 +417,6 @@ impl EventSerializer {
 impl Default for EventSerializer {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// シリアライゼーションユーティリティ関数
-pub mod utils {
-    use super::*;
-
-    /// 標準的なイベントシリアライザーを使用してイベントをシリアライズ
-    pub fn serialize_domain_event(event: &DomainEvent) -> Result<String, SerializationError> {
-        let serializer = EventSerializer::new();
-        serializer.serialize_event(event)
-    }
-
-    /// 標準的なイベントシリアライザーを使用してイベントをデシリアライズ
-    pub fn deserialize_domain_event(json: &str) -> Result<DomainEvent, SerializationError> {
-        let serializer = EventSerializer::new();
-        serializer.deserialize_event(json)
-    }
-
-    /// イベントの往復テスト
-    pub fn test_event_round_trip(event: &DomainEvent) -> Result<bool, SerializationError> {
-        let serializer = EventSerializer::new();
-        let deserialized = serializer.round_trip_test(event)?;
-
-        // 基本的な等価性チェック
-        Ok(event.event_type() == deserialized.event_type()
-            && event.metadata().event_id == deserialized.metadata().event_id
-            && event.metadata().correlation_id == deserialized.metadata().correlation_id)
     }
 }
 
@@ -580,16 +552,16 @@ mod tests {
             Money::jpy(1000),
         ));
 
-        // ユーティリティ関数のテスト
-        let serialized = utils::serialize_domain_event(&event);
+        // 直接シリアライザーを使用したテスト
+        let serializer = EventSerializer::new();
+        let serialized = serializer.serialize_event(&event);
         assert!(serialized.is_ok());
 
         let json = serialized.unwrap();
-        let deserialized = utils::deserialize_domain_event(&json);
+        let deserialized = serializer.deserialize_event(&json);
         assert!(deserialized.is_ok());
 
-        let round_trip_test = utils::test_event_round_trip(&event);
+        let round_trip_test = serializer.round_trip_test(&event);
         assert!(round_trip_test.is_ok());
-        assert!(round_trip_test.unwrap());
     }
 }

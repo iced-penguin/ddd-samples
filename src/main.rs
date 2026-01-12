@@ -2,7 +2,7 @@ mod adapter;
 mod application;
 mod domain;
 
-use adapter::driven::{InMemoryEventBus, MySqlInventoryRepository, MySqlOrderRepository};
+use adapter::driven::{EventBusConfig, InMemoryEventBus, MySqlInventoryRepository, MySqlOrderRepository};
 use adapter::driver::rest_api::{create_router, AppStateInner};
 use adapter::{DatabaseConfig, DatabaseMigration};
 use application::service::{InventoryApplicationService, OrderApplicationService};
@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let inventory_repository = Arc::new(MySqlInventoryRepository::new(pool.clone()));
 
     // イベントバスを作成
-    let event_bus = Arc::new(InMemoryEventBus::new());
+    let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
 
     // イベントハンドラーを作成して登録
     let inventory_handler = crate::domain::handler::InventoryReservationHandler::new(

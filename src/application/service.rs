@@ -102,7 +102,7 @@ where
             .ok_or_else(|| {
                 ApplicationError::NotFound(format!(
                     "注文が見つかりません: {}",
-                    order_id.to_string()
+                    order_id
                 ))
             })?;
         order.add_book(book_id, quantity, price)?;
@@ -139,7 +139,7 @@ where
             .ok_or_else(|| {
                 ApplicationError::NotFound(format!(
                     "注文が見つかりません: {}",
-                    order_id.to_string()
+                    order_id
                 ))
             })?;
         let address =
@@ -165,7 +165,7 @@ where
             .ok_or_else(|| {
                 ApplicationError::NotFound(format!(
                     "注文が見つかりません: {}",
-                    order_id.to_string()
+                    order_id
                 ))
             })?;
 
@@ -207,7 +207,7 @@ where
             .ok_or_else(|| {
                 ApplicationError::NotFound(format!(
                     "注文が見つかりません: {}",
-                    order_id.to_string()
+                    order_id
                 ))
             })?;
 
@@ -247,7 +247,7 @@ where
             .ok_or_else(|| {
                 ApplicationError::NotFound(format!(
                     "注文が見つかりません: {}",
-                    order_id.to_string()
+                    order_id
                 ))
             })?;
 
@@ -287,7 +287,7 @@ where
             .ok_or_else(|| {
                 ApplicationError::NotFound(format!(
                     "注文が見つかりません: {}",
-                    order_id.to_string()
+                    order_id
                 ))
             })?;
 

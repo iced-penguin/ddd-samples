@@ -156,25 +156,6 @@ impl OrderConfirmed {
             total_amount,
         }
     }
-
-    /// 相関IDを指定して注文確定イベントを作成
-    pub fn with_correlation_id(
-        order_id: OrderId,
-        customer_id: CustomerId,
-        order_lines: Vec<OrderLine>,
-        total_amount: Money,
-        correlation_id: Uuid,
-    ) -> Self {
-        Self {
-            metadata: EventMetadata::with_correlation_id(correlation_id)
-                .with_metadata("aggregate_type".to_string(), "Order".to_string())
-                .with_metadata("aggregate_id".to_string(), order_id.to_string()),
-            order_id,
-            customer_id,
-            order_lines,
-            total_amount,
-        }
-    }
 }
 
 /// 注文キャンセルイベント
@@ -302,17 +283,6 @@ pub struct InventoryReserved {
 }
 
 impl InventoryReserved {
-    /// 新しい在庫予約イベントを作成
-    pub fn new(order_id: OrderId, order_lines: Vec<OrderLine>) -> Self {
-        Self {
-            metadata: EventMetadata::new()
-                .with_metadata("aggregate_type".to_string(), "Inventory".to_string())
-                .with_metadata("related_order_id".to_string(), order_id.to_string()),
-            order_id,
-            order_lines,
-        }
-    }
-
     /// 相関IDを指定して在庫予約イベントを作成
     pub fn with_correlation_id(
         order_id: OrderId,
@@ -341,17 +311,6 @@ pub struct InventoryReleased {
 }
 
 impl InventoryReleased {
-    /// 新しい在庫解放イベントを作成
-    pub fn new(order_id: OrderId, order_lines: Vec<OrderLine>) -> Self {
-        Self {
-            metadata: EventMetadata::new()
-                .with_metadata("aggregate_type".to_string(), "Inventory".to_string())
-                .with_metadata("related_order_id".to_string(), order_id.to_string()),
-            order_id,
-            order_lines,
-        }
-    }
-
     /// 相関IDを指定して在庫解放イベントを作成
     pub fn with_correlation_id(
         order_id: OrderId,
@@ -486,19 +445,6 @@ pub struct DeliveryFailed {
 }
 
 impl DeliveryFailed {
-    /// 新しい配達失敗イベントを作成
-    pub fn new(order_id: OrderId, failure_reason: String, original_event_id: Uuid) -> Self {
-        Self {
-            metadata: EventMetadata::new()
-                .with_metadata("aggregate_type".to_string(), "Order".to_string())
-                .with_metadata("aggregate_id".to_string(), order_id.to_string())
-                .with_metadata("compensation_event".to_string(), "true".to_string()),
-            order_id,
-            failure_reason,
-            original_event_id,
-        }
-    }
-
     /// 相関IDを指定して配達失敗イベントを作成
     pub fn with_correlation_id(
         order_id: OrderId,

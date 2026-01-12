@@ -39,7 +39,7 @@ impl MySqlOrderRepository {
             let order_id: String = row.get("id");
             order_groups
                 .entry(order_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(row);
         }
 
@@ -111,7 +111,7 @@ impl MySqlOrderRepository {
                     })?;
 
                     let order_line =
-                        OrderLine::new(book_id, quantity as u32, unit_price).map_err(|e| {
+                        OrderLine::new(book_id, quantity, unit_price).map_err(|e| {
                             RepositoryError::FetchFailed(format!(
                                 "注文明細の構築に失敗しました: {}",
                                 e
@@ -309,7 +309,7 @@ impl OrderRepository for MySqlOrderRepository {
                 })?;
 
                 let order_line =
-                    OrderLine::new(book_id, quantity as u32, unit_price).map_err(|e| {
+                    OrderLine::new(book_id, quantity, unit_price).map_err(|e| {
                         RepositoryError::FetchFailed(format!("注文明細の構築に失敗しました: {}", e))
                     })?;
 

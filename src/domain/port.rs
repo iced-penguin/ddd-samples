@@ -9,6 +9,7 @@ use async_trait::async_trait;
 /// リポジトリエラー型
 /// リポジトリ操作で発生するエラーを表現する
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 pub enum RepositoryError {
     /// データベース接続に失敗
     ConnectionFailed(String),
@@ -132,16 +133,8 @@ pub trait InventoryRepository: Send + Sync {
 /// イベントバスエラー
 #[derive(Debug, thiserror::Error)]
 pub enum EventBusError {
-    #[error("Handler registration failed: {0}")]
-    RegistrationFailed(String),
     #[error("Event publishing failed: {0}")]
     PublishingFailed(String),
-    #[error("Handler execution failed: {0}")]
-    HandlerExecutionFailed(String),
-    #[error("Dead letter queue error: {0}")]
-    DeadLetterQueueError(String),
-    #[error("Schema compatibility error: {0}")]
-    SchemaCompatibilityError(String),
 }
 
 /// イベントバストレイト

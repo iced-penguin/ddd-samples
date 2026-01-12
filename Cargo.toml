@@ -19,5 +19,13 @@ thiserror = "1.0"
 
 [dev-dependencies]
 proptest = "1.0"
-cargo-watch = "8.4"
 axum-test = "15.0"
+
+# 統合テストの設定
+[[test]]
+name = "property_tests"
+path = "tests/property_tests.rs"
+
+[[test]]
+name = "saga_integration_tests"
+path = "tests/saga_integration_tests.rs"

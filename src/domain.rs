@@ -6,4 +6,3 @@ pub mod logging;
 pub mod model;
 pub mod port;
 pub mod serialization;
-pub mod service;

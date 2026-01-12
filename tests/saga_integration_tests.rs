@@ -13,11 +13,33 @@ use bookstore_order_management::domain::port::EventBus;
 use bookstore_order_management::domain::port::{
     InventoryRepository, OrderRepository, RepositoryError,
 };
+use bookstore_order_management::domain::serialization::{EventSerializer, SerializationError};
 
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+// テスト用ヘルパー関数
+fn serialize_domain_event(event: &DomainEvent) -> Result<String, SerializationError> {
+    let serializer = EventSerializer::new();
+    serializer.serialize_event(event)
+}
+
+fn deserialize_domain_event(json: &str) -> Result<DomainEvent, SerializationError> {
+    let serializer = EventSerializer::new();
+    serializer.deserialize_event(json)
+}
+
+fn test_event_round_trip(event: &DomainEvent) -> Result<bool, SerializationError> {
+    let serializer = EventSerializer::new();
+    let deserialized = serializer.round_trip_test(event)?;
+
+    // 基本的な等価性チェック
+    Ok(event.event_type() == deserialized.event_type()
+        && event.metadata().event_id == deserialized.metadata().event_id
+        && event.metadata().correlation_id == deserialized.metadata().correlation_id)
+}
 
 // テスト用のモックリポジトリ
 struct MockOrderRepository {
@@ -125,10 +147,9 @@ async fn test_complete_order_lifecycle_saga_flow() {
         max_retry_attempts: 3, // リトライを有効にして冪等性の問題を検証
         retry_delay: std::time::Duration::from_millis(50),
         dead_letter_queue_max_size: 100,
-        max_concurrent_handlers: 1,
         handler_timeout: std::time::Duration::from_secs(5),
     };
-    let event_bus = Arc::new(InMemoryEventBus::with_config(config));
+    let event_bus = Arc::new(InMemoryEventBus::new(config));
 
     // ハンドラーの作成
     let inventory_handler = InventoryReservationHandler::new(
@@ -248,7 +269,7 @@ async fn test_complete_order_lifecycle_saga_flow() {
     // 冪等性の検証：在庫は正確に注文数量だけ減るべき
     // 注意：現在の実装では冪等性が実装されていないため、このテストは失敗する可能性がある
     assert_eq!(
-        final_inventory.quantity_on_hand(), 
+        final_inventory.quantity_on_hand(),
         expected_final_inventory,
         "Inventory should be exactly {} (initial: {} - ordered: {}), but got: {}. This indicates a lack of idempotency in event handlers.",
         expected_final_inventory, initial_inventory, order_quantity, final_inventory.quantity_on_hand()
@@ -264,7 +285,7 @@ async fn test_complete_order_lifecycle_saga_flow() {
 async fn test_event_handler_idempotency() {
     let inventory_repo = Arc::new(MockInventoryRepository::new());
     let order_repo = Arc::new(MockOrderRepository::new());
-    let event_bus = Arc::new(InMemoryEventBus::new());
+    let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
     let handler = InventoryReservationHandler::new(
         inventory_repo.clone(),
         order_repo.clone(),
@@ -336,7 +357,7 @@ async fn test_event_handler_idempotency() {
     // 冪等性の検証：在庫は1回だけ減るべき
     // 注意：現在の実装では冪等性が実装されていないため、このテストは失敗する
     assert_eq!(
-        final_inventory.quantity_on_hand(), 
+        final_inventory.quantity_on_hand(),
         expected_final_inventory,
         "Idempotency violation: Inventory should be {} after processing the same event multiple times, but got {}. Each event should only be processed once.",
         expected_final_inventory, final_inventory.quantity_on_hand()
@@ -352,7 +373,7 @@ async fn test_saga_compensation_flow() {
     // インフラストラクチャの設定
     let inventory_repo = Arc::new(MockInventoryRepository::new());
     let order_repo = Arc::new(MockOrderRepository::new());
-    let event_bus = Arc::new(InMemoryEventBus::new());
+    let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
 
     // ハンドラーの作成
     let inventory_handler = InventoryReservationHandler::new(
@@ -454,7 +475,7 @@ async fn test_saga_compensation_flow() {
 /// イベントバスのルーティング正確性テスト
 #[tokio::test]
 async fn test_event_bus_routing_correctness() {
-    let event_bus = Arc::new(InMemoryEventBus::new());
+    let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
     let order_repo = Arc::new(MockOrderRepository::new());
     let inventory_repo = Arc::new(MockInventoryRepository::new());
 
@@ -508,7 +529,7 @@ async fn test_event_bus_routing_correctness() {
 /// 並行ハンドラー処理のテスト
 #[tokio::test]
 async fn test_concurrent_handler_processing() {
-    let event_bus = Arc::new(InMemoryEventBus::new());
+    let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
     let order_repo = Arc::new(MockOrderRepository::new());
     let inventory_repo = Arc::new(MockInventoryRepository::new());
 
@@ -612,7 +633,7 @@ async fn test_event_serialization_round_trip() {
 async fn test_order_confirmation_saga_step() {
     let inventory_repo = Arc::new(MockInventoryRepository::new());
     let order_repo = Arc::new(MockOrderRepository::new());
-    let event_bus = Arc::new(InMemoryEventBus::new());
+    let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
     let handler = InventoryReservationHandler::new(
         inventory_repo.clone(),
         order_repo.clone(),
@@ -680,7 +701,7 @@ async fn test_order_confirmation_saga_step() {
 /// シリアライゼーションエラー明確性テスト
 #[tokio::test]
 async fn test_serialization_error_clarity() {
-    use bookstore_order_management::domain::serialization::{EventSerializer, SerializationError};
+    use bookstore_order_management::domain::serialization::EventSerializer;
 
     let serializer = EventSerializer::new();
 
@@ -792,7 +813,7 @@ async fn test_event_bus_serialization_validation() {
     use bookstore_order_management::adapter::driven::InMemoryEventBus;
     use bookstore_order_management::domain::port::EventBus;
 
-    let event_bus = InMemoryEventBus::new();
+    let event_bus = InMemoryEventBus::new(EventBusConfig::default());
 
     // 正常なイベントは問題なく発行できる
     let valid_event = DomainEvent::OrderConfirmed(OrderConfirmed::new(
@@ -814,7 +835,7 @@ async fn test_event_bus_serialization_validation() {
 /// エッジケースでのシリアライゼーション処理テスト
 #[tokio::test]
 async fn test_serialization_edge_cases() {
-    use bookstore_order_management::domain::serialization::{utils, EventSerializer};
+    use bookstore_order_management::domain::serialization::EventSerializer;
 
     let serializer = EventSerializer::new();
 
@@ -848,7 +869,7 @@ async fn test_serialization_edge_cases() {
     assert!(deserialized.is_ok());
 
     // 往復テストも成功することを確認
-    let round_trip_result = utils::test_event_round_trip(&event);
+    let round_trip_result = test_event_round_trip(&event);
     assert!(round_trip_result.is_ok());
     assert!(round_trip_result.unwrap());
 
@@ -867,7 +888,7 @@ async fn test_serialization_edge_cases() {
         );
     }
 
-    let unicode_result = utils::test_event_round_trip(&unicode_event);
+    let unicode_result = test_event_round_trip(&unicode_event);
     assert!(unicode_result.is_ok());
     assert!(unicode_result.unwrap());
 }
@@ -876,7 +897,7 @@ async fn test_serialization_edge_cases() {
 /// シリアライゼーションユーティリティ関数のテスト
 #[tokio::test]
 async fn test_serialization_utility_functions() {
-    use bookstore_order_management::domain::serialization::utils;
+
 
     let event = DomainEvent::OrderConfirmed(OrderConfirmed::new(
         OrderId::new(),
@@ -886,7 +907,7 @@ async fn test_serialization_utility_functions() {
     ));
 
     // ユーティリティ関数でのシリアライゼーション
-    let serialized = utils::serialize_domain_event(&event);
+    let serialized = serialize_domain_event(&event);
     assert!(serialized.is_ok());
 
     let json = serialized.unwrap();
@@ -895,7 +916,7 @@ async fn test_serialization_utility_functions() {
     assert!(json.contains("event_data"));
 
     // ユーティリティ関数でのデシリアライゼーション
-    let deserialized = utils::deserialize_domain_event(&json);
+    let deserialized = deserialize_domain_event(&json);
     assert!(deserialized.is_ok());
 
     let deserialized_event = deserialized.unwrap();
@@ -906,7 +927,7 @@ async fn test_serialization_utility_functions() {
     );
 
     // 往復テストユーティリティ
-    let round_trip_result = utils::test_event_round_trip(&event);
+    let round_trip_result = test_event_round_trip(&event);
     assert!(round_trip_result.is_ok());
     assert!(round_trip_result.unwrap());
 }

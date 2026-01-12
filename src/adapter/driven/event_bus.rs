@@ -1,8 +1,8 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::event_bus::{
     DeliveryFailedHandlerWrapper, DynEventHandler, EventHandler, HandlerError,
-    InventoryReleasedHandlerWrapper, InventoryReservationFailedHandlerWrapper,
-    InventoryReservedHandlerWrapper, OrderCancelledHandlerWrapper, OrderConfirmedHandlerWrapper,
+    InventoryReservedHandlerWrapper, InventoryReservationFailedHandlerWrapper,
+    OrderCancelledHandlerWrapper, OrderConfirmedHandlerWrapper,
     OrderDeliveredHandlerWrapper, OrderShippedHandlerWrapper,
     SagaCompensationCompletedHandlerWrapper, SagaCompensationStartedHandlerWrapper,
     ShippingFailedHandlerWrapper,
@@ -17,6 +17,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::{Mutex, RwLock};
 
 /// 失敗したイベント処理の情報
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct FailedEventProcessing {
     pub event: DomainEvent,
@@ -29,6 +30,7 @@ pub struct FailedEventProcessing {
 }
 
 /// デッドレターキューエントリ
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DeadLetterEntry {
     pub failed_processing: FailedEventProcessing,
@@ -44,8 +46,6 @@ pub struct EventBusConfig {
     pub retry_delay: Duration,
     /// デッドレターキューの最大サイズ
     pub dead_letter_queue_max_size: usize,
-    /// 並行処理の最大数
-    pub max_concurrent_handlers: usize,
     /// ハンドラータイムアウト
     pub handler_timeout: Duration,
 }
@@ -56,7 +56,6 @@ impl Default for EventBusConfig {
             max_retry_attempts: 3,
             retry_delay: Duration::from_millis(1000),
             dead_letter_queue_max_size: 1000,
-            max_concurrent_handlers: 10,
             handler_timeout: Duration::from_secs(30),
         }
     }
@@ -72,19 +71,39 @@ pub struct InMemoryEventBus {
 }
 
 impl InMemoryEventBus {
-    /// 新しいインメモリイベントバスを作成
-    pub fn new() -> Self {
-        Self::with_config(EventBusConfig::default())
-    }
-
     /// 設定を指定してインメモリイベントバスを作成
-    pub fn with_config(config: EventBusConfig) -> Self {
+    /// 
+    /// # 例
+    /// ```
+    /// use bookstore_order_management::adapter::driven::{InMemoryEventBus, EventBusConfig};
+    /// 
+    /// // デフォルト設定で作成
+    /// let event_bus = InMemoryEventBus::new(EventBusConfig::default());
+    /// 
+    /// // カスタム設定で作成
+    /// let config = EventBusConfig {
+    ///     max_retry_attempts: 5,
+    ///     retry_delay: std::time::Duration::from_millis(100),
+    ///     ..EventBusConfig::default()
+    /// };
+    /// let event_bus = InMemoryEventBus::new(config);
+    /// ```
+    pub fn new(config: EventBusConfig) -> Self {
         Self {
             handlers: Arc::new(RwLock::new(Vec::new())),
             dead_letter_queue: Arc::new(Mutex::new(VecDeque::new())),
             config,
             serializer: EventSerializer::new(),
         }
+    }
+
+    /// 設定を指定してインメモリイベントバスを作成（newのエイリアス）
+    /// 
+    /// 注意: このメソッドは後方互換性のために残されています。
+    /// 新しいコードでは`new(config)`を使用してください。
+    #[deprecated(since = "0.1.0", note = "Use `new(config)` instead")]
+    pub fn with_config(config: EventBusConfig) -> Self {
+        Self::new(config)
     }
 
     /// ハンドラーの実行（エラー処理とリトライ機能付き）
@@ -232,46 +251,17 @@ impl InMemoryEventBus {
         }
     }
 
-    /// デッドレターキューの内容を取得
-    pub async fn get_dead_letter_queue(&self) -> Vec<DeadLetterEntry> {
-        let dlq = self.dead_letter_queue.lock().await;
-        dlq.iter().cloned().collect()
-    }
-
-    /// デッドレターキューをクリア
-    pub async fn clear_dead_letter_queue(&self) -> Result<(), EventBusError> {
-        let mut dlq = self.dead_letter_queue.lock().await;
-        dlq.clear();
-        Ok(())
-    }
-
-    /// 失敗したイベントを再試行
-    pub async fn retry_failed_event(&self, entry: &DeadLetterEntry) -> Result<(), EventBusError> {
-        if !entry.failed_processing.is_retryable {
-            return Err(EventBusError::DeadLetterQueueError(
-                "Event is not retryable".to_string(),
-            ));
-        }
-
-        // イベントを再発行
-        self.publish(entry.failed_processing.event.clone()).await
-    }
 
     /// 登録されているハンドラーの数を取得
     pub async fn handler_count(&self) -> usize {
         let handlers = self.handlers.read().await;
         handlers.len()
     }
-
-    /// 設定を取得
-    pub fn config(&self) -> &EventBusConfig {
-        &self.config
-    }
 }
 
 impl Default for InMemoryEventBus {
     fn default() -> Self {
-        Self::new()
+        Self::new(EventBusConfig::default())
     }
 }
 
@@ -408,6 +398,8 @@ impl InMemoryEventBus {
         Ok(())
     }
 
+
+
     /// OrderConfirmedハンドラーを名前付きで登録
     pub async fn subscribe_order_confirmed_with_name<H>(
         &self,
@@ -456,23 +448,14 @@ impl InMemoryEventBus {
         Ok(())
     }
 
+
+
     /// InventoryReservedハンドラーを登録
     pub async fn subscribe_inventory_reserved<H>(&self, handler: H) -> Result<(), EventBusError>
     where
         H: EventHandler<crate::domain::event::InventoryReserved> + Send + Sync + 'static,
     {
         let wrapped_handler = InventoryReservedHandlerWrapper::new(handler);
-        let mut handlers = self.handlers.write().await;
-        handlers.push(Box::new(wrapped_handler));
-        Ok(())
-    }
-
-    /// InventoryReleasedハンドラーを登録
-    pub async fn subscribe_inventory_released<H>(&self, handler: H) -> Result<(), EventBusError>
-    where
-        H: EventHandler<crate::domain::event::InventoryReleased> + Send + Sync + 'static,
-    {
-        let wrapped_handler = InventoryReleasedHandlerWrapper::new(handler);
         let mut handlers = self.handlers.write().await;
         handlers.push(Box::new(wrapped_handler));
         Ok(())

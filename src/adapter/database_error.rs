@@ -1,6 +1,7 @@
 /// データベースエラー型
 /// データベース操作で発生するエラーを表現する
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 pub enum DatabaseError {
     /// データベース接続エラー
     ConnectionError(String),
