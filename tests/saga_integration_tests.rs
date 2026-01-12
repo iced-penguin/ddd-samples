@@ -135,7 +135,7 @@ impl InventoryRepository for MockInventoryRepository {
 }
 
 /// **Feature: choreography-saga-refactoring, Property 4: Eventual Consistency Across Aggregates**
-/// 完全な注文ライフサイクルのサーガフローテスト（冪等性の問題を検証）
+/// 注文確定から在庫予約までのサーガフローテスト（冪等性の検証）
 #[tokio::test]
 async fn test_complete_order_lifecycle_saga_flow() {
     // インフラストラクチャの設定（リトライを有効にして冪等性の問題を検証）
@@ -151,53 +151,31 @@ async fn test_complete_order_lifecycle_saga_flow() {
     };
     let event_bus = Arc::new(InMemoryEventBus::new(config));
 
-    // ハンドラーの作成
+    // ハンドラーの作成（自動実行される在庫予約ハンドラーのみ）
     let inventory_handler = InventoryReservationHandler::new(
         inventory_repo.clone(),
         order_repo.clone(),
         event_bus.clone(),
     );
-    let shipping_handler = ShippingHandler::new(order_repo.clone(), event_bus.clone());
-    let delivery_handler = DeliveryHandler::new(order_repo.clone(), event_bus.clone());
     let notification_handler = NotificationHandler::new();
     let consistency_verifier =
         EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone());
 
-    // イベントバスにハンドラーを登録（完全なコレオグラフィを形成）
+    // イベントバスにハンドラーを登録（自動実行される部分のみ）
     event_bus
         .subscribe_order_confirmed(inventory_handler)
         .await
         .unwrap();
-    event_bus
-        .subscribe_inventory_reserved(shipping_handler)
-        .await
-        .unwrap();
-    event_bus
-        .subscribe_order_shipped(delivery_handler)
-        .await
-        .unwrap();
 
-    // 通知ハンドラーを全てのイベントに登録
+    // 通知ハンドラーを登録
     event_bus
         .subscribe_order_confirmed(notification_handler.clone())
-        .await
-        .unwrap();
-    event_bus
-        .subscribe_order_shipped(notification_handler.clone())
-        .await
-        .unwrap();
-    event_bus
-        .subscribe_order_delivered(notification_handler)
         .await
         .unwrap();
 
     // 整合性検証ハンドラーを登録
     event_bus
         .subscribe_order_confirmed(consistency_verifier.clone())
-        .await
-        .unwrap();
-    event_bus
-        .subscribe_order_delivered(consistency_verifier)
         .await
         .unwrap();
 
@@ -247,7 +225,7 @@ async fn test_complete_order_lifecycle_saga_flow() {
     app_service.confirm_order(order_id).await.unwrap();
 
     // イベント処理が完了するまで十分に待機
-    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // 最終状態の検証
     let final_order = order_repo.find_by_id(order_id).await.unwrap().unwrap();
@@ -257,17 +235,16 @@ async fn test_complete_order_lifecycle_saga_flow() {
         .unwrap()
         .unwrap();
 
-    // サーガが完全に実行されたことを確認
-    // 並行処理の問題でShippedまでしか到達しない可能性もあるため、より柔軟な検証
-    let final_status = final_order.status();
-    assert!(
-        final_status == OrderStatus::Delivered || final_status == OrderStatus::Shipped,
-        "Order should be delivered or shipped after saga, but got: {:?}",
-        final_status
+    // 注文確定後の状態確認：在庫予約まで自動実行される
+    // 注文状態はConfirmedのまま（発送・配達は手動操作が必要）
+    assert_eq!(
+        final_order.status(),
+        OrderStatus::Confirmed,
+        "Order should remain in Confirmed state after automatic saga steps, but got: {:?}",
+        final_order.status()
     );
 
     // 冪等性の検証：在庫は正確に注文数量だけ減るべき
-    // 注意：現在の実装では冪等性が実装されていないため、このテストは失敗する可能性がある
     assert_eq!(
         final_inventory.quantity_on_hand(),
         expected_final_inventory,
@@ -275,7 +252,7 @@ async fn test_complete_order_lifecycle_saga_flow() {
         expected_final_inventory, initial_inventory, order_quantity, final_inventory.quantity_on_hand()
     );
 
-    println!("✅ Complete saga flow test passed - Order lifecycle completed with correct inventory management");
+    println!("✅ Order confirmation saga flow test passed - Inventory reserved with idempotency maintained");
 }
 
 /// **Feature: choreography-saga-refactoring, Property 25: Event Handler Idempotency**

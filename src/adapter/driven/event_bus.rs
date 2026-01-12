@@ -417,19 +417,6 @@ impl InMemoryEventBus {
         Ok(())
     }
 
-
-
-    /// InventoryReservedハンドラーを登録
-    pub async fn subscribe_inventory_reserved<H>(&self, handler: H) -> Result<(), EventBusError>
-    where
-        H: EventHandler<crate::domain::event::InventoryReserved> + Send + Sync + 'static,
-    {
-        let wrapped_handler = InventoryReservedHandlerWrapper::new(handler);
-        let mut handlers = self.handlers.write().await;
-        handlers.push(Box::new(wrapped_handler));
-        Ok(())
-    }
-
     // ========== 補償イベント用の登録メソッド ==========
 
     /// InventoryReservationFailedハンドラーを登録
