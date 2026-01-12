@@ -471,60 +471,6 @@ async fn test_saga_compensation_flow() {
     println!("✅ Saga compensation test passed - Order cancelled due to insufficient inventory");
 }
 
-/// **Feature: choreography-saga-refactoring, Property 1: Event Bus Routing Correctness**
-/// イベントバスのルーティング正確性テスト
-#[tokio::test]
-async fn test_event_bus_routing_correctness() {
-    let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
-    let order_repo = Arc::new(MockOrderRepository::new());
-    let inventory_repo = Arc::new(MockInventoryRepository::new());
-
-    // 複数のハンドラーを同じイベントタイプに登録
-    let notification_handler1 = NotificationHandler::new();
-    let notification_handler2 = NotificationHandler::new();
-    let consistency_verifier =
-        EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone());
-
-    event_bus
-        .subscribe_order_confirmed_with_name(
-            notification_handler1,
-            "NotificationHandler1".to_string(),
-        )
-        .await
-        .unwrap();
-    event_bus
-        .subscribe_order_confirmed_with_name(
-            notification_handler2,
-            "NotificationHandler2".to_string(),
-        )
-        .await
-        .unwrap();
-    event_bus
-        .subscribe_order_confirmed(consistency_verifier)
-        .await
-        .unwrap();
-
-    // 初期ハンドラー数を確認
-    assert_eq!(
-        event_bus.handler_count().await,
-        3,
-        "Should have 3 handlers registered"
-    );
-
-    // イベントを発行
-    let order_id = OrderId::new();
-    let customer_id = CustomerId::new();
-    let event = OrderConfirmed::new(order_id, customer_id, vec![], Money::jpy(1000));
-
-    let result = event_bus.publish(DomainEvent::OrderConfirmed(event)).await;
-    assert!(result.is_ok(), "Event publishing should succeed");
-
-    // 処理完了を待機
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-    println!("✅ Event bus routing test passed - All handlers received the event");
-}
-
 /// **Feature: choreography-saga-refactoring, Property 15: Concurrent Handler Processing**
 /// 並行ハンドラー処理のテスト
 #[tokio::test]

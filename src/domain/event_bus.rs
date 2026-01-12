@@ -52,10 +52,6 @@ where
             name: "OrderConfirmedHandler".to_string(),
         }
     }
-
-    pub fn with_name(handler: H, name: String) -> Self {
-        Self { handler, name }
-    }
 }
 
 #[async_trait]

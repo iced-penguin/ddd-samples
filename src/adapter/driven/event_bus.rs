@@ -97,15 +97,6 @@ impl InMemoryEventBus {
         }
     }
 
-    /// 設定を指定してインメモリイベントバスを作成（newのエイリアス）
-    /// 
-    /// 注意: このメソッドは後方互換性のために残されています。
-    /// 新しいコードでは`new(config)`を使用してください。
-    #[deprecated(since = "0.1.0", note = "Use `new(config)` instead")]
-    pub fn with_config(config: EventBusConfig) -> Self {
-        Self::new(config)
-    }
-
     /// ハンドラーの実行（エラー処理とリトライ機能付き）
     async fn execute_handler_with_retry(
         &self,
@@ -250,13 +241,6 @@ impl InMemoryEventBus {
             }
         }
     }
-
-
-    /// 登録されているハンドラーの数を取得
-    pub async fn handler_count(&self) -> usize {
-        let handlers = self.handlers.read().await;
-        handlers.len()
-    }
 }
 
 impl Default for InMemoryEventBus {
@@ -399,21 +383,6 @@ impl InMemoryEventBus {
     }
 
 
-
-    /// OrderConfirmedハンドラーを名前付きで登録
-    pub async fn subscribe_order_confirmed_with_name<H>(
-        &self,
-        handler: H,
-        name: String,
-    ) -> Result<(), EventBusError>
-    where
-        H: EventHandler<crate::domain::event::OrderConfirmed> + Send + Sync + 'static,
-    {
-        let wrapped_handler = OrderConfirmedHandlerWrapper::with_name(handler, name);
-        let mut handlers = self.handlers.write().await;
-        handlers.push(Box::new(wrapped_handler));
-        Ok(())
-    }
 
     /// OrderCancelledハンドラーを登録
     pub async fn subscribe_order_cancelled<H>(&self, handler: H) -> Result<(), EventBusError>
