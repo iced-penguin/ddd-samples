@@ -5,6 +5,57 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::model::{BookId, Inventory, Order, OrderId, OrderStatus};
 use async_trait::async_trait;
+use std::collections::HashMap;
+use uuid::Uuid;
+
+/// ログレベル
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warning,
+    Error,
+}
+
+/// ロガートレイト
+/// ログ出力を抽象化するポート
+pub trait Logger: Send + Sync {
+    /// デバッグレベルのログを出力
+    fn debug(
+        &self,
+        component: &str,
+        message: &str,
+        correlation_id: Option<Uuid>,
+        context: Option<HashMap<String, String>>,
+    );
+
+    /// 情報レベルのログを出力
+    fn info(
+        &self,
+        component: &str,
+        message: &str,
+        correlation_id: Option<Uuid>,
+        context: Option<HashMap<String, String>>,
+    );
+
+    /// 警告レベルのログを出力
+    fn warn(
+        &self,
+        component: &str,
+        message: &str,
+        correlation_id: Option<Uuid>,
+        context: Option<HashMap<String, String>>,
+    );
+
+    /// エラーレベルのログを出力
+    fn error(
+        &self,
+        component: &str,
+        message: &str,
+        correlation_id: Option<Uuid>,
+        context: Option<HashMap<String, String>>,
+    );
+}
 
 /// リポジトリエラー型
 /// リポジトリ操作で発生するエラーを表現する

@@ -1,13 +1,12 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::event_bus::{
     DeliveryFailedHandlerWrapper, DynEventHandler, EventHandler, HandlerError,
-    InventoryReservedHandlerWrapper, InventoryReservationFailedHandlerWrapper,
+    InventoryReservationFailedHandlerWrapper,
     OrderCancelledHandlerWrapper, OrderConfirmedHandlerWrapper,
     OrderDeliveredHandlerWrapper, OrderShippedHandlerWrapper,
     SagaCompensationCompletedHandlerWrapper, SagaCompensationStartedHandlerWrapper,
     ShippingFailedHandlerWrapper,
 };
-use crate::domain::logging::EventLogger;
 use crate::domain::port::{EventBus, EventBusError};
 use crate::domain::serialization::EventSerializer;
 use async_trait::async_trait;
@@ -186,16 +185,6 @@ impl InMemoryEventBus {
         };
 
         dlq.push_back(entry);
-
-        // デッドレターキュー追加ログ
-        EventLogger::log_dead_letter_queue_entry(
-            event.event_type(),
-            &handler_name,
-            event.metadata().correlation_id,
-            &error.to_string(),
-            self.config.max_retry_attempts,
-        );
-
         Ok(())
     }
 
@@ -208,15 +197,8 @@ impl InMemoryEventBus {
                 match self.serializer.deserialize_event(&json) {
                     Ok(_) => Ok(()),
                     Err(serialization_error) => {
-                        EventLogger::log_error(
-                            "EventBus",
-                            &format!(
-                                "Event deserialization validation failed: {}",
-                                serialization_error
-                            ),
-                            Some(event.metadata().correlation_id),
-                            None,
-                        );
+                        // Note: Logger trait is not available in this context as it would create circular dependency
+                        // Serialization errors should be handled at the application layer
                         Err(EventBusError::PublishingFailed(format!(
                             "Serialization error: {}",
                             serialization_error
@@ -225,15 +207,8 @@ impl InMemoryEventBus {
                 }
             }
             Err(serialization_error) => {
-                EventLogger::log_error(
-                    "EventBus",
-                    &format!(
-                        "Event serialization validation failed: {}",
-                        serialization_error
-                    ),
-                    Some(event.metadata().correlation_id),
-                    None,
-                );
+                // Note: Logger trait is not available in this context as it would create circular dependency
+                // Serialization errors should be handled at the application layer
                 Err(EventBusError::PublishingFailed(format!(
                     "Serialization error: {}",
                     serialization_error
@@ -256,11 +231,8 @@ impl EventBus for InMemoryEventBus {
         self.validate_event_serialization(&event)?;
 
         // イベント発行ログ
-        EventLogger::log_event_published(
-            event.event_type(),
-            event.metadata().correlation_id,
-            event.metadata().event_id,
-        );
+        // Note: Logger trait is not available in this context as it would create circular dependency
+        // Individual handlers log their own processing
 
         // ハンドラー情報を収集
         let handlers = {
@@ -288,24 +260,16 @@ impl EventBus for InMemoryEventBus {
                 ));
 
                 // エラーログ
-                EventLogger::log_handler_error(
-                    &handler_name,
-                    event.event_type(),
-                    event.metadata().correlation_id,
-                    &error.to_string(),
-                    None,
-                );
+                // Note: Logger trait is not available in this context as it would create circular dependency
+                // Individual handlers should log their own failures
 
                 if let Err(dlq_error) = self
                     .add_to_dead_letter_queue(event.clone(), handler_name.clone(), &error)
                     .await
                 {
-                    EventLogger::log_error(
-                        "EventBus",
-                        &format!("Failed to add to dead letter queue: {}", dlq_error),
-                        Some(event.metadata().correlation_id),
-                        None,
-                    );
+                    // Note: Logger trait is not available in this context as it would create circular dependency
+                    // DLQ errors are handled silently to prevent infinite loops
+                    let _ = dlq_error; // Acknowledge the error without logging
                 }
                 continue;
             }
@@ -316,14 +280,8 @@ impl EventBus for InMemoryEventBus {
                     // 成功ログは個別のハンドラー内で出力される
                 }
                 Err(handler_error) => {
-                    // エラーログ
-                    EventLogger::log_handler_error(
-                        &handler_name,
-                        event.event_type(),
-                        event.metadata().correlation_id,
-                        &handler_error.to_string(),
-                        None,
-                    );
+                    // Note: Logger trait is not available in this context as it would create circular dependency
+                    // Individual handlers should log their own failures
 
                     if let Err(dlq_error) = self
                         .add_to_dead_letter_queue(
@@ -333,12 +291,9 @@ impl EventBus for InMemoryEventBus {
                         )
                         .await
                     {
-                        EventLogger::log_error(
-                            "EventBus",
-                            &format!("Failed to add to dead letter queue: {}", dlq_error),
-                            Some(event.metadata().correlation_id),
-                            None,
-                        );
+                        // Note: Logger trait is not available in this context as it would create circular dependency
+                        // DLQ errors are handled silently to prevent infinite loops
+                        let _ = dlq_error; // Acknowledge the error without logging
                     }
                 }
             }

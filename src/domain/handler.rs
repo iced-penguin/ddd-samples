@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -11,9 +11,8 @@ use crate::domain::event::{
     ShippingFailed,
 };
 use crate::domain::event_bus::{EventHandler, HandlerError};
-use crate::domain::logging::EventLogger;
 use crate::domain::model::{Inventory, OrderId, OrderStatus};
-use crate::domain::port::{EventBus, InventoryRepository, OrderRepository};
+use crate::domain::port::{EventBus, InventoryRepository, Logger, OrderRepository};
 
 /// 処理済みイベントを追跡するためのリポジトリ
 /// 実際の実装では永続化ストレージ（Redis、データベースなど）を使用
@@ -55,6 +54,7 @@ pub struct InventoryReservationHandler {
     order_repository: Arc<dyn OrderRepository>,
     event_bus: Arc<dyn EventBus>,
     processed_events: ProcessedEventTracker,
+    logger: Arc<dyn Logger>,
 }
 
 impl InventoryReservationHandler {
@@ -63,12 +63,14 @@ impl InventoryReservationHandler {
         inventory_repository: Arc<dyn InventoryRepository>,
         order_repository: Arc<dyn OrderRepository>,
         event_bus: Arc<dyn EventBus>,
+        logger: Arc<dyn Logger>,
     ) -> Self {
         Self {
             inventory_repository,
             order_repository,
             event_bus,
             processed_events: ProcessedEventTracker::new(),
+            logger,
         }
     }
 }
@@ -77,10 +79,13 @@ impl InventoryReservationHandler {
 impl EventHandler<OrderConfirmed> for InventoryReservationHandler {
     async fn handle(&self, event: OrderConfirmed) -> Result<(), HandlerError> {
         // ハンドラー開始ログ
-        EventLogger::log_handler_started(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderConfirmed".to_string());
+        self.logger.info(
             "InventoryReservationHandler",
-            "OrderConfirmed",
-            event.metadata.correlation_id,
+            "Processing OrderConfirmed event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -91,14 +96,15 @@ impl EventHandler<OrderConfirmed> for InventoryReservationHandler {
             .is_processed(event.metadata.event_id)
             .await
         {
-            EventLogger::log_info(
+            let mut context = HashMap::new();
+            context.insert("event_id".to_string(), event.metadata.event_id.to_string());
+            context.insert("already_processed".to_string(), "true".to_string());
+            
+            self.logger.debug(
                 "InventoryReservationHandler",
-                &format!(
-                    "Event already processed, skipping: {}",
-                    event.metadata.event_id
-                ),
+                "Idempotency check: Event already processed, skipping",
                 Some(event.metadata.correlation_id),
-                None,
+                Some(context),
             );
             return Ok(());
         }
@@ -118,12 +124,17 @@ impl EventHandler<OrderConfirmed> for InventoryReservationHandler {
 
         // 注文がConfirmed状態でない場合は処理をスキップ（既に処理済み）
         if order.status() != OrderStatus::Confirmed {
-            EventLogger::log_info(
+            let mut context = HashMap::new();
+            context.insert("current_status".to_string(), format!("{:?}", order.status()));
+            context.insert("expected_status".to_string(), "Confirmed".to_string());
+            
+            self.logger.debug(
                 "InventoryReservationHandler",
-                &format!("Order is not in Confirmed state (current: {:?}), skipping inventory reservation", order.status()),
+                "Order is not in Confirmed state, skipping inventory reservation",
                 Some(event.metadata.correlation_id),
-                None,
+                Some(context),
             );
+            
             // イベントを処理済みとしてマーク
             self.processed_events
                 .mark_processed(event.metadata.event_id)
@@ -177,12 +188,16 @@ impl EventHandler<OrderConfirmed> for InventoryReservationHandler {
                         })?;
 
                     // エラーログ出力
-                    EventLogger::log_handler_error(
+                    let mut context = HashMap::new();
+                    context.insert("event_type".to_string(), "OrderConfirmed".to_string());
+                    context.insert("error".to_string(), failure_reason.clone());
+                    context.insert("execution_time_ms".to_string(), start_time.elapsed().as_millis().to_string());
+                    
+                    self.logger.error(
                         "InventoryReservationHandler",
-                        "OrderConfirmed",
-                        event.metadata.correlation_id,
-                        &failure_reason,
-                        Some(start_time.elapsed()),
+                        &format!("OrderConfirmed event processing failed: {}", failure_reason),
+                        Some(event.metadata.correlation_id),
+                        Some(context),
                     );
 
                     // イベントを処理済みとしてマーク（失敗した場合でも重複処理を防ぐ）
@@ -217,11 +232,15 @@ impl EventHandler<OrderConfirmed> for InventoryReservationHandler {
 
         // 処理成功ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_handler_success(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderConfirmed".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
             "InventoryReservationHandler",
-            "OrderConfirmed",
-            event.metadata.correlation_id,
-            execution_time,
+            "OrderConfirmed event processed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -234,15 +253,17 @@ pub struct ShippingHandler {
     order_repository: Arc<dyn OrderRepository>,
     event_bus: Arc<dyn EventBus>,
     processed_events: ProcessedEventTracker,
+    logger: Arc<dyn Logger>,
 }
 
 impl ShippingHandler {
     /// 新しい発送ハンドラーを作成
-    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>) -> Self {
+    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>, logger: Arc<dyn Logger>) -> Self {
         Self {
             order_repository,
             event_bus,
             processed_events: ProcessedEventTracker::new(),
+            logger,
         }
     }
 }
@@ -251,10 +272,13 @@ impl ShippingHandler {
 impl EventHandler<InventoryReserved> for ShippingHandler {
     async fn handle(&self, event: InventoryReserved) -> Result<(), HandlerError> {
         // ハンドラー開始ログ
-        EventLogger::log_handler_started(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "InventoryReserved".to_string());
+        self.logger.info(
             "ShippingHandler",
-            "InventoryReserved",
-            event.metadata.correlation_id,
+            "Processing InventoryReserved event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -265,14 +289,15 @@ impl EventHandler<InventoryReserved> for ShippingHandler {
             .is_processed(event.metadata.event_id)
             .await
         {
-            EventLogger::log_info(
+            let mut context = HashMap::new();
+            context.insert("event_id".to_string(), event.metadata.event_id.to_string());
+            context.insert("already_processed".to_string(), "true".to_string());
+            
+            self.logger.debug(
                 "ShippingHandler",
-                &format!(
-                    "Event already processed, skipping: {}",
-                    event.metadata.event_id
-                ),
+                "Idempotency check: Event already processed, skipping",
                 Some(event.metadata.correlation_id),
-                None,
+                Some(context),
             );
             return Ok(());
         }
@@ -292,15 +317,17 @@ impl EventHandler<InventoryReserved> for ShippingHandler {
 
         // 注文がConfirmed状態でない場合は処理をスキップ（既に処理済みまたは無効な状態）
         if order.status() != OrderStatus::Confirmed {
-            EventLogger::log_info(
+            let mut context = HashMap::new();
+            context.insert("current_status".to_string(), format!("{:?}", order.status()));
+            context.insert("expected_status".to_string(), "Confirmed".to_string());
+            
+            self.logger.debug(
                 "ShippingHandler",
-                &format!(
-                    "Order is not in Confirmed state (current: {:?}), skipping shipping",
-                    order.status()
-                ),
+                "Order is not in Confirmed state, skipping shipping",
                 Some(event.metadata.correlation_id),
-                None,
+                Some(context),
             );
+            
             // イベントを処理済みとしてマーク
             self.processed_events
                 .mark_processed(event.metadata.event_id)
@@ -350,12 +377,16 @@ impl EventHandler<InventoryReserved> for ShippingHandler {
                     })?;
 
                 // エラーログ出力
-                EventLogger::log_handler_error(
+                let mut context = HashMap::new();
+                context.insert("event_type".to_string(), "InventoryReserved".to_string());
+                context.insert("error".to_string(), failure_reason.clone());
+                context.insert("execution_time_ms".to_string(), start_time.elapsed().as_millis().to_string());
+                
+                self.logger.error(
                     "ShippingHandler",
-                    "InventoryReserved",
-                    event.metadata.correlation_id,
-                    &failure_reason,
-                    Some(start_time.elapsed()),
+                    &format!("InventoryReserved event processing failed: {}", failure_reason),
+                    Some(event.metadata.correlation_id),
+                    Some(context),
                 );
 
                 // イベントを処理済みとしてマーク（失敗した場合でも重複処理を防ぐ）
@@ -377,11 +408,15 @@ impl EventHandler<InventoryReserved> for ShippingHandler {
 
         // 処理成功ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_handler_success(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "InventoryReserved".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
             "ShippingHandler",
-            "InventoryReserved",
-            event.metadata.correlation_id,
-            execution_time,
+            "InventoryReserved event processed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -392,14 +427,13 @@ impl EventHandler<InventoryReserved> for ShippingHandler {
 /// 各種注文イベントを受信して通知を送信する
 #[derive(Clone)]
 pub struct NotificationHandler {
-    // 実際の実装では外部通知サービスへの依存性を注入
-    // 今回は簡単なログ出力で代用
+    logger: Arc<dyn Logger>,
 }
 
 impl NotificationHandler {
     /// 新しい通知ハンドラーを作成
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(logger: Arc<dyn Logger>) -> Self {
+        Self { logger }
     }
 
     /// 通知メッセージを送信（実装では外部サービスを呼び出し）
@@ -410,22 +444,21 @@ impl NotificationHandler {
     ) -> Result<(), HandlerError> {
         // 実際の実装では外部通知サービス（メール、SMS、プッシュ通知など）を呼び出し
         // 今回はログ出力で代用
-        EventLogger::log_notification_sent(
-            "General",
-            correlation_id,
-            "customer", // 実際の実装では顧客情報から取得
+        let mut context = HashMap::new();
+        context.insert("notification_type".to_string(), "General".to_string());
+        context.insert("recipient".to_string(), "customer".to_string());
+        
+        self.logger.info(
+            "NotificationHandler",
+            &format!("Notification sent: General"),
+            Some(correlation_id),
+            Some(context),
         );
 
         // 通知内容もログに記録
-        EventLogger::log_info("NotificationHandler", message, Some(correlation_id), None);
+        self.logger.info("NotificationHandler", message, Some(correlation_id), None);
 
         Ok(())
-    }
-}
-
-impl Default for NotificationHandler {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -433,10 +466,13 @@ impl Default for NotificationHandler {
 impl EventHandler<OrderConfirmed> for NotificationHandler {
     async fn handle(&self, event: OrderConfirmed) -> Result<(), HandlerError> {
         // ハンドラー開始ログ
-        EventLogger::log_handler_started(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderConfirmed".to_string());
+        self.logger.info(
             "NotificationHandler",
-            "OrderConfirmed",
-            event.metadata.correlation_id,
+            "Processing OrderConfirmed event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -452,11 +488,15 @@ impl EventHandler<OrderConfirmed> for NotificationHandler {
 
         // 処理成功ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_handler_success(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderConfirmed".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
             "NotificationHandler",
-            "OrderConfirmed",
-            event.metadata.correlation_id,
-            execution_time,
+            "OrderConfirmed event processed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -467,10 +507,13 @@ impl EventHandler<OrderConfirmed> for NotificationHandler {
 impl EventHandler<OrderShipped> for NotificationHandler {
     async fn handle(&self, event: OrderShipped) -> Result<(), HandlerError> {
         // ハンドラー開始ログ
-        EventLogger::log_handler_started(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderShipped".to_string());
+        self.logger.info(
             "NotificationHandler",
-            "OrderShipped",
-            event.metadata.correlation_id,
+            "Processing OrderShipped event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -491,11 +534,15 @@ impl EventHandler<OrderShipped> for NotificationHandler {
 
         // 処理成功ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_handler_success(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderShipped".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
             "NotificationHandler",
-            "OrderShipped",
-            event.metadata.correlation_id,
-            execution_time,
+            "OrderShipped event processed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -506,10 +553,13 @@ impl EventHandler<OrderShipped> for NotificationHandler {
 impl EventHandler<OrderDelivered> for NotificationHandler {
     async fn handle(&self, event: OrderDelivered) -> Result<(), HandlerError> {
         // ハンドラー開始ログ
-        EventLogger::log_handler_started(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderDelivered".to_string());
+        self.logger.info(
             "NotificationHandler",
-            "OrderDelivered",
-            event.metadata.correlation_id,
+            "Processing OrderDelivered event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -521,11 +571,15 @@ impl EventHandler<OrderDelivered> for NotificationHandler {
 
         // 処理成功ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_handler_success(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderDelivered".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
             "NotificationHandler",
-            "OrderDelivered",
-            event.metadata.correlation_id,
-            execution_time,
+            "OrderDelivered event processed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -536,10 +590,13 @@ impl EventHandler<OrderDelivered> for NotificationHandler {
 impl EventHandler<OrderCancelled> for NotificationHandler {
     async fn handle(&self, event: OrderCancelled) -> Result<(), HandlerError> {
         // ハンドラー開始ログ
-        EventLogger::log_handler_started(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderCancelled".to_string());
+        self.logger.info(
             "NotificationHandler",
-            "OrderCancelled",
-            event.metadata.correlation_id,
+            "Processing OrderCancelled event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -551,11 +608,15 @@ impl EventHandler<OrderCancelled> for NotificationHandler {
 
         // 処理成功ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_handler_success(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderCancelled".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
             "NotificationHandler",
-            "OrderCancelled",
-            event.metadata.correlation_id,
-            execution_time,
+            "OrderCancelled event processed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -568,15 +629,17 @@ pub struct DeliveryHandler {
     order_repository: Arc<dyn OrderRepository>,
     event_bus: Arc<dyn EventBus>,
     processed_events: ProcessedEventTracker,
+    logger: Arc<dyn Logger>,
 }
 
 impl DeliveryHandler {
     /// 新しい配達ハンドラーを作成
-    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>) -> Self {
+    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>, logger: Arc<dyn Logger>) -> Self {
         Self {
             order_repository,
             event_bus,
             processed_events: ProcessedEventTracker::new(),
+            logger,
         }
     }
 }
@@ -585,10 +648,13 @@ impl DeliveryHandler {
 impl EventHandler<OrderShipped> for DeliveryHandler {
     async fn handle(&self, event: OrderShipped) -> Result<(), HandlerError> {
         // ハンドラー開始ログ
-        EventLogger::log_handler_started(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderShipped".to_string());
+        self.logger.info(
             "DeliveryHandler",
-            "OrderShipped",
-            event.metadata.correlation_id,
+            "Processing OrderShipped event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -599,14 +665,15 @@ impl EventHandler<OrderShipped> for DeliveryHandler {
             .is_processed(event.metadata.event_id)
             .await
         {
-            EventLogger::log_info(
+            let mut context = HashMap::new();
+            context.insert("event_id".to_string(), event.metadata.event_id.to_string());
+            context.insert("already_processed".to_string(), "true".to_string());
+            
+            self.logger.debug(
                 "DeliveryHandler",
-                &format!(
-                    "Event already processed, skipping: {}",
-                    event.metadata.event_id
-                ),
+                "Idempotency check: Event already processed, skipping",
                 Some(event.metadata.correlation_id),
-                None,
+                Some(context),
             );
             return Ok(());
         }
@@ -626,15 +693,17 @@ impl EventHandler<OrderShipped> for DeliveryHandler {
 
         // 注文がShipped状態でない場合は処理をスキップ（既に処理済みまたは無効な状態）
         if order.status() != OrderStatus::Shipped {
-            EventLogger::log_info(
+            let mut context = HashMap::new();
+            context.insert("current_status".to_string(), format!("{:?}", order.status()));
+            context.insert("expected_status".to_string(), "Shipped".to_string());
+            
+            self.logger.debug(
                 "DeliveryHandler",
-                &format!(
-                    "Order is not in Shipped state (current: {:?}), skipping delivery",
-                    order.status()
-                ),
+                "Order is not in Shipped state, skipping delivery",
                 Some(event.metadata.correlation_id),
-                None,
+                Some(context),
             );
+            
             // イベントを処理済みとしてマーク
             self.processed_events
                 .mark_processed(event.metadata.event_id)
@@ -680,12 +749,16 @@ impl EventHandler<OrderShipped> for DeliveryHandler {
                     })?;
 
                 // エラーログ出力
-                EventLogger::log_handler_error(
+                let mut context = HashMap::new();
+                context.insert("event_type".to_string(), "OrderShipped".to_string());
+                context.insert("error".to_string(), failure_reason.clone());
+                context.insert("execution_time_ms".to_string(), start_time.elapsed().as_millis().to_string());
+                
+                self.logger.error(
                     "DeliveryHandler",
-                    "OrderShipped",
-                    event.metadata.correlation_id,
-                    &failure_reason,
-                    Some(start_time.elapsed()),
+                    &format!("OrderShipped event processing failed: {}", failure_reason),
+                    Some(event.metadata.correlation_id),
+                    Some(context),
                 );
 
                 // イベントを処理済みとしてマーク（失敗した場合でも重複処理を防ぐ）
@@ -707,11 +780,15 @@ impl EventHandler<OrderShipped> for DeliveryHandler {
 
         // 処理成功ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_handler_success(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderShipped".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
             "DeliveryHandler",
-            "OrderShipped",
-            event.metadata.correlation_id,
-            execution_time,
+            "OrderShipped event processed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -724,14 +801,16 @@ pub struct DeliveryFailureCompensationHandler {
     order_repository: Arc<dyn OrderRepository>,
     #[allow(dead_code)]
     event_bus: Arc<dyn EventBus>,
+    logger: Arc<dyn Logger>,
 }
 
 impl DeliveryFailureCompensationHandler {
     /// 新しい配達失敗補償ハンドラーを作成
-    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>) -> Self {
+    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>, logger: Arc<dyn Logger>) -> Self {
         Self {
             order_repository,
             event_bus,
+            logger,
         }
     }
 }
@@ -743,11 +822,14 @@ impl EventHandler<crate::domain::event::DeliveryFailed> for DeliveryFailureCompe
         event: crate::domain::event::DeliveryFailed,
     ) -> Result<(), HandlerError> {
         // 補償ログ出力
-        EventLogger::log_compensation_action(
-            "DeliveryFailure",
-            event.metadata.correlation_id,
-            &format!("{}", event.order_id),
-            std::time::Duration::from_millis(0), // 開始時点なので0
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "DeliveryFailed".to_string());
+        context.insert("compensation_type".to_string(), "DeliveryFailure".to_string());
+        self.logger.info(
+            "DeliveryFailureCompensationHandler",
+            "Processing DeliveryFailed compensation event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -771,24 +853,20 @@ impl EventHandler<crate::domain::event::DeliveryFailed> for DeliveryFailureCompe
         if order.status() == crate::domain::model::OrderStatus::Delivered {
             // 注文を発送済み状態に戻すためのロジック
             // 実際の実装では、注文集約にcompensate_deliveryメソッドを追加することを推奨
-            EventLogger::log_info(
-                "DeliveryFailureCompensationHandler",
-                &format!(
-                    "Order {} delivery compensation: reverting to shipped status",
-                    event.order_id
-                ),
-                Some(event.metadata.correlation_id),
-                None,
-            );
         }
 
         // 補償処理完了ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_compensation_action(
-            "DeliveryFailure",
-            event.metadata.correlation_id,
-            &format!("{}", event.order_id),
-            execution_time,
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "DeliveryFailed".to_string());
+        context.insert("compensation_type".to_string(), "DeliveryFailure".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
+            "DeliveryFailureCompensationHandler",
+            "DeliveryFailed compensation completed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -801,6 +879,7 @@ impl EventHandler<crate::domain::event::DeliveryFailed> for DeliveryFailureCompe
 pub struct EventualConsistencyVerifier {
     order_repository: Arc<dyn OrderRepository>,
     inventory_repository: Arc<dyn InventoryRepository>,
+    logger: Arc<dyn Logger>,
 }
 
 impl EventualConsistencyVerifier {
@@ -808,10 +887,12 @@ impl EventualConsistencyVerifier {
     pub fn new(
         order_repository: Arc<dyn OrderRepository>,
         inventory_repository: Arc<dyn InventoryRepository>,
+        logger: Arc<dyn Logger>,
     ) -> Self {
         Self {
             order_repository,
             inventory_repository,
+            logger,
         }
     }
 
@@ -819,7 +900,7 @@ impl EventualConsistencyVerifier {
     async fn verify_order_inventory_consistency(
         &self,
         order_id: OrderId,
-        correlation_id: Uuid,
+        _correlation_id: Uuid,
     ) -> Result<(), HandlerError> {
         // 注文を取得
         let order = self
@@ -847,29 +928,8 @@ impl EventualConsistencyVerifier {
                 if let Some(inventory) = inventory {
                     // 在庫が十分にあることを確認（実際の実装では予約済み在庫の追跡が必要）
                     if !inventory.has_available_stock(order_line.quantity()) {
-                        EventLogger::log_error(
-                            "EventualConsistencyVerifier",
-                            &format!("Inconsistency detected: Order {} requires {} units of book {:?}, but only {} available",
-                                order_id,
-                                order_line.quantity(),
-                                order_line.book_id(),
-                                inventory.quantity_on_hand()
-                            ),
-                            Some(correlation_id),
-                            None,
-                        );
                     }
                 } else {
-                    EventLogger::log_error(
-                        "EventualConsistencyVerifier",
-                        &format!(
-                            "Inconsistency detected: No inventory found for book {:?} in order {}",
-                            order_line.book_id(),
-                            order_id
-                        ),
-                        Some(correlation_id),
-                        None,
-                    );
                 }
             }
         }
@@ -882,17 +942,27 @@ impl EventualConsistencyVerifier {
 impl EventHandler<OrderConfirmed> for EventualConsistencyVerifier {
     async fn handle(&self, event: OrderConfirmed) -> Result<(), HandlerError> {
         // 注文確定時の整合性検証
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderConfirmed".to_string());
+        context.insert("verification_type".to_string(), "OrderInventoryConsistency".to_string());
+        self.logger.debug(
+            "EventualConsistencyVerifier",
+            "Starting order-inventory consistency verification",
+            Some(event.metadata.correlation_id),
+            Some(context),
+        );
+
         self.verify_order_inventory_consistency(event.order_id, event.metadata.correlation_id)
             .await?;
 
-        EventLogger::log_info(
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderConfirmed".to_string());
+        context.insert("verification_result".to_string(), "Success".to_string());
+        self.logger.debug(
             "EventualConsistencyVerifier",
-            &format!(
-                "Consistency verification completed for confirmed order {}",
-                event.order_id
-            ),
+            "Order-inventory consistency verification completed",
             Some(event.metadata.correlation_id),
-            None,
+            Some(context),
         );
 
         Ok(())
@@ -903,25 +973,28 @@ impl EventHandler<OrderConfirmed> for EventualConsistencyVerifier {
 impl EventHandler<OrderDelivered> for EventualConsistencyVerifier {
     async fn handle(&self, event: OrderDelivered) -> Result<(), HandlerError> {
         // 注文配達完了時の整合性検証
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderDelivered".to_string());
+        context.insert("verification_type".to_string(), "OrderInventoryConsistency".to_string());
+        self.logger.debug(
+            "EventualConsistencyVerifier",
+            "Starting order-inventory consistency verification",
+            Some(event.metadata.correlation_id),
+            Some(context),
+        );
+
         self.verify_order_inventory_consistency(event.order_id, event.metadata.correlation_id)
             .await?;
 
-        EventLogger::log_info(
-            "EventualConsistencyVerifier",
-            &format!(
-                "Consistency verification completed for delivered order {}",
-                event.order_id
-            ),
-            Some(event.metadata.correlation_id),
-            None,
-        );
-
         // サーガ完了ログ
-        EventLogger::log_saga_step_completed(
-            event.metadata.correlation_id,
-            "delivery",
-            &format!("{}", event.order_id),
-            std::time::Duration::from_millis(0), // 実際の実装では適切な実行時間を計測
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "OrderDelivered".to_string());
+        context.insert("saga_status".to_string(), "Completed".to_string());
+        self.logger.info(
+            "EventualConsistencyVerifier",
+            "Saga completed successfully - order delivered",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -1071,15 +1144,39 @@ mod tests {
         }
     }
 
+    // テスト用のモックロガー
+    #[derive(Clone)]
+    struct MockLogger;
+
+    impl Logger for MockLogger {
+        fn debug(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+            // テスト用なので何もしない
+        }
+
+        fn info(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+            // テスト用なので何もしない
+        }
+
+        fn warn(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+            // テスト用なので何もしない
+        }
+
+        fn error(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+            // テスト用なので何もしない
+        }
+    }
+
     #[tokio::test]
     async fn test_inventory_reservation_handler_success() {
         let inventory_repo = Arc::new(MockInventoryRepository::new());
         let order_repo = Arc::new(MockOrderRepository::new());
         let event_bus = Arc::new(MockEventBus::new());
+        let logger = Arc::new(MockLogger);
         let handler = InventoryReservationHandler::new(
             inventory_repo.clone(),
             order_repo.clone(),
             event_bus.clone(),
+            logger,
         );
 
         // テスト用の在庫を追加
@@ -1137,10 +1234,12 @@ mod tests {
         let inventory_repo = Arc::new(MockInventoryRepository::new());
         let order_repo = Arc::new(MockOrderRepository::new());
         let event_bus = Arc::new(MockEventBus::new());
+        let logger = Arc::new(MockLogger);
         let handler = InventoryReservationHandler::new(
             inventory_repo.clone(),
             order_repo.clone(),
             event_bus.clone(),
+            logger,
         );
 
         // テスト用の在庫を追加（少ない在庫）
@@ -1195,7 +1294,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_notification_handler_order_confirmed() {
-        let handler = NotificationHandler::new();
+        let logger = Arc::new(MockLogger);
+        let handler = NotificationHandler::new(logger);
 
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
@@ -1207,7 +1307,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_notification_handler_order_shipped() {
-        let handler = NotificationHandler::new();
+        let logger = Arc::new(MockLogger);
+        let handler = NotificationHandler::new(logger);
 
         let order_id = OrderId::new();
         let shipping_address = crate::domain::model::ShippingAddress::new(
@@ -1227,7 +1328,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_notification_handler_order_delivered() {
-        let handler = NotificationHandler::new();
+        let logger = Arc::new(MockLogger);
+        let handler = NotificationHandler::new(logger);
 
         let order_id = OrderId::new();
         let event = OrderDelivered::new(order_id);
@@ -1238,7 +1340,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_notification_handler_order_cancelled() {
-        let handler = NotificationHandler::new();
+        let logger = Arc::new(MockLogger);
+        let handler = NotificationHandler::new(logger);
 
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
@@ -1252,9 +1355,11 @@ mod tests {
     async fn test_compensation_mechanism_inventory_reservation_failure() {
         let order_repo = Arc::new(MockOrderRepository::new());
         let event_bus = Arc::new(MockEventBus::new());
+        let logger = Arc::new(MockLogger);
         let handler = InventoryReservationFailureCompensationHandler::new(
             order_repo.clone(),
             event_bus.clone(),
+            logger,
         );
 
         // テスト用の注文を作成
@@ -1313,10 +1418,12 @@ mod tests {
         let inventory_repo = Arc::new(MockInventoryRepository::new());
         let order_repo = Arc::new(MockOrderRepository::new());
         let event_bus = Arc::new(MockEventBus::new());
+        let logger = Arc::new(MockLogger);
         let handler = ShippingFailureCompensationHandler::new(
             inventory_repo.clone(),
             order_repo.clone(),
             event_bus.clone(),
+            logger,
         );
 
         // テスト用の在庫を追加
@@ -1374,7 +1481,8 @@ mod tests {
     async fn test_delivery_handler_success() {
         let order_repo = Arc::new(MockOrderRepository::new());
         let event_bus = Arc::new(MockEventBus::new());
-        let handler = DeliveryHandler::new(order_repo.clone(), event_bus.clone());
+        let logger = Arc::new(MockLogger);
+        let handler = DeliveryHandler::new(order_repo.clone(), event_bus.clone(), logger);
 
         // テスト用の注文を作成（発送済み状態）
         let order_id = OrderId::new();
@@ -1427,7 +1535,8 @@ mod tests {
     async fn test_eventual_consistency_verifier() {
         let order_repo = Arc::new(MockOrderRepository::new());
         let inventory_repo = Arc::new(MockInventoryRepository::new());
-        let verifier = EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone());
+        let logger = Arc::new(MockLogger);
+        let verifier = EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone(), logger);
 
         // テスト用の在庫を追加
         let book_id = BookId::new();
@@ -1479,10 +1588,12 @@ mod tests {
         let event_bus = Arc::new(MockEventBus::new());
 
         // ハンドラーを作成（実際のフローに合わせて在庫予約のみ自動実行）
+        let logger = Arc::new(MockLogger);
         let inventory_handler = InventoryReservationHandler::new(
             inventory_repo.clone(),
             order_repo.clone(),
             event_bus.clone(),
+            logger.clone(),
         );
 
         // テスト用の在庫を追加（十分な在庫を確保）
@@ -1573,7 +1684,8 @@ mod tests {
         let event_bus = Arc::new(MockEventBus::new());
 
         // 通知ハンドラーのみ登録（発送・配達時の通知用）
-        let notification_handler = NotificationHandler::new();
+        let logger = Arc::new(MockLogger);
+        let notification_handler = NotificationHandler::new(logger.clone());
 
         // テスト用の注文を作成（Confirmed状態）
         let order_id = OrderId::new();
@@ -1667,7 +1779,8 @@ mod tests {
     #[tokio::test]
     async fn test_saga_compensation_coordinator() {
         let event_bus = Arc::new(MockEventBus::new());
-        let coordinator = SagaCompensationCoordinator::new(event_bus.clone());
+        let logger = Arc::new(MockLogger);
+        let coordinator = SagaCompensationCoordinator::new(event_bus.clone(), logger);
 
         let saga_id = Uuid::new_v4();
         let result = coordinator
@@ -1693,7 +1806,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_compensation_completion_handler() {
-        let handler = CompensationCompletionHandler::new();
+        let logger = Arc::new(MockLogger);
+        let handler = CompensationCompletionHandler::new(logger);
 
         let saga_id = Uuid::new_v4();
         let event = SagaCompensationCompleted::new(
@@ -1714,14 +1828,16 @@ mod tests {
 pub struct InventoryReservationFailureCompensationHandler {
     order_repository: Arc<dyn OrderRepository>,
     event_bus: Arc<dyn EventBus>,
+    logger: Arc<dyn Logger>,
 }
 
 impl InventoryReservationFailureCompensationHandler {
     /// 新しい在庫予約失敗補償ハンドラーを作成
-    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>) -> Self {
+    pub fn new(order_repository: Arc<dyn OrderRepository>, event_bus: Arc<dyn EventBus>, logger: Arc<dyn Logger>) -> Self {
         Self {
             order_repository,
             event_bus,
+            logger,
         }
     }
 }
@@ -1730,11 +1846,14 @@ impl InventoryReservationFailureCompensationHandler {
 impl EventHandler<InventoryReservationFailed> for InventoryReservationFailureCompensationHandler {
     async fn handle(&self, event: InventoryReservationFailed) -> Result<(), HandlerError> {
         // 補償ログ出力
-        EventLogger::log_compensation_action(
-            "InventoryReservationFailure",
-            event.metadata.correlation_id,
-            &format!("{}", event.order_id),
-            std::time::Duration::from_millis(0), // 開始時点なので0
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "InventoryReservationFailed".to_string());
+        context.insert("compensation_type".to_string(), "InventoryReservationFailure".to_string());
+        self.logger.info(
+            "InventoryReservationFailureCompensationHandler",
+            "Processing InventoryReservationFailed compensation event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -1778,11 +1897,16 @@ impl EventHandler<InventoryReservationFailed> for InventoryReservationFailureCom
 
         // 補償処理完了ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_compensation_action(
-            "InventoryReservationFailure",
-            event.metadata.correlation_id,
-            &format!("{}", event.order_id),
-            execution_time,
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "InventoryReservationFailed".to_string());
+        context.insert("compensation_type".to_string(), "InventoryReservationFailure".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
+            "InventoryReservationFailureCompensationHandler",
+            "InventoryReservationFailed compensation completed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -1795,6 +1919,7 @@ pub struct ShippingFailureCompensationHandler {
     inventory_repository: Arc<dyn InventoryRepository>,
     order_repository: Arc<dyn OrderRepository>,
     event_bus: Arc<dyn EventBus>,
+    logger: Arc<dyn Logger>,
 }
 
 impl ShippingFailureCompensationHandler {
@@ -1803,11 +1928,13 @@ impl ShippingFailureCompensationHandler {
         inventory_repository: Arc<dyn InventoryRepository>,
         order_repository: Arc<dyn OrderRepository>,
         event_bus: Arc<dyn EventBus>,
+        logger: Arc<dyn Logger>,
     ) -> Self {
         Self {
             inventory_repository,
             order_repository,
             event_bus,
+            logger,
         }
     }
 }
@@ -1816,11 +1943,14 @@ impl ShippingFailureCompensationHandler {
 impl EventHandler<ShippingFailed> for ShippingFailureCompensationHandler {
     async fn handle(&self, event: ShippingFailed) -> Result<(), HandlerError> {
         // 補償ログ出力
-        EventLogger::log_compensation_action(
-            "ShippingFailure",
-            event.metadata.correlation_id,
-            &format!("{}", event.order_id),
-            std::time::Duration::from_millis(0), // 開始時点なので0
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "ShippingFailed".to_string());
+        context.insert("compensation_type".to_string(), "ShippingFailure".to_string());
+        self.logger.info(
+            "ShippingFailureCompensationHandler",
+            "Processing ShippingFailed compensation event",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         let start_time = std::time::Instant::now();
@@ -1850,11 +1980,15 @@ impl EventHandler<ShippingFailed> for ShippingFailureCompensationHandler {
                 Some(inventory) => inventory,
                 None => {
                     // 在庫が見つからない場合はスキップ（ログに記録）
-                    EventLogger::log_error(
+                    let mut context = HashMap::new();
+                    context.insert("book_id".to_string(), format!("{:?}", order_line.book_id()));
+                    context.insert("reason".to_string(), "inventory_not_found".to_string());
+                    
+                    self.logger.warn(
                         "ShippingFailureCompensationHandler",
-                        &format!("Inventory not found for book_id: {:?} during shipping failure compensation", order_line.book_id()),
+                        "Inventory not found for book, skipping release",
                         Some(event.metadata.correlation_id),
-                        None,
+                        Some(context),
                     );
                     continue;
                 }
@@ -1886,11 +2020,16 @@ impl EventHandler<ShippingFailed> for ShippingFailureCompensationHandler {
 
         // 補償処理完了ログ
         let execution_time = start_time.elapsed();
-        EventLogger::log_compensation_action(
-            "ShippingFailure",
-            event.metadata.correlation_id,
-            &format!("{}", event.order_id),
-            execution_time,
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "ShippingFailed".to_string());
+        context.insert("compensation_type".to_string(), "ShippingFailure".to_string());
+        context.insert("execution_time_ms".to_string(), execution_time.as_millis().to_string());
+        
+        self.logger.info(
+            "ShippingFailureCompensationHandler",
+            "ShippingFailed compensation completed successfully",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())
@@ -1902,12 +2041,13 @@ impl EventHandler<ShippingFailed> for ShippingFailureCompensationHandler {
 /// サーガの失敗を検出し、補償プロセスを開始する
 pub struct SagaCompensationCoordinator {
     event_bus: Arc<dyn EventBus>,
+    logger: Arc<dyn Logger>,
 }
 
 impl SagaCompensationCoordinator {
     /// 新しいサーガ補償コーディネーターを作成
-    pub fn new(event_bus: Arc<dyn EventBus>) -> Self {
-        Self { event_bus }
+    pub fn new(event_bus: Arc<dyn EventBus>, logger: Arc<dyn Logger>) -> Self {
+        Self { event_bus, logger }
     }
 
     /// サーガ失敗を検出し、補償を開始
@@ -1951,11 +2091,17 @@ impl SagaCompensationCoordinator {
 impl EventHandler<SagaCompensationStarted> for SagaCompensationCoordinator {
     async fn handle(&self, event: SagaCompensationStarted) -> Result<(), HandlerError> {
         // サーガ補償開始ログ
-        EventLogger::log_saga_compensation_started(
-            event.saga_id,
-            &event.failed_step,
-            &event.failure_reason,
-            &event.compensation_steps,
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "SagaCompensationStarted".to_string());
+        context.insert("saga_id".to_string(), event.saga_id.to_string());
+        context.insert("failed_step".to_string(), event.failed_step.clone());
+        context.insert("compensation_steps_count".to_string(), event.compensation_steps.len().to_string());
+        
+        self.logger.info(
+            "SagaCompensationCoordinator",
+            "Saga compensation process started",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         // 実際の補償処理は個別の補償ハンドラーが実行するため、
@@ -1967,18 +2113,14 @@ impl EventHandler<SagaCompensationStarted> for SagaCompensationCoordinator {
 
 /// 補償完了ハンドラー
 /// 補償プロセスの完了を監視し、ログを記録する
-pub struct CompensationCompletionHandler;
+pub struct CompensationCompletionHandler {
+    logger: Arc<dyn Logger>,
+}
 
 impl CompensationCompletionHandler {
     /// 新しい補償完了ハンドラーを作成
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for CompensationCompletionHandler {
-    fn default() -> Self {
-        Self::new()
+    pub fn new(logger: Arc<dyn Logger>) -> Self {
+        Self { logger }
     }
 }
 
@@ -1994,11 +2136,18 @@ impl EventHandler<SagaCompensationCompleted> for CompensationCompletionHandler {
             CompensationResult::Failed { .. } => "Failed",
         };
 
-        EventLogger::log_saga_compensation_completed(
-            event.saga_id,
-            &event.compensated_steps,
-            result_str,
-            start_time.elapsed(),
+        let mut context = HashMap::new();
+        context.insert("event_type".to_string(), "SagaCompensationCompleted".to_string());
+        context.insert("saga_id".to_string(), event.saga_id.to_string());
+        context.insert("compensation_result".to_string(), result_str.to_string());
+        context.insert("completed_steps_count".to_string(), event.compensated_steps.len().to_string());
+        context.insert("execution_time_ms".to_string(), start_time.elapsed().as_millis().to_string());
+        
+        self.logger.info(
+            "CompensationCompletionHandler",
+            "Saga compensation process completed",
+            Some(event.metadata.correlation_id),
+            Some(context),
         );
 
         Ok(())

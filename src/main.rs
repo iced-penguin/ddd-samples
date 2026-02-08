@@ -2,10 +2,11 @@ mod adapter;
 mod application;
 mod domain;
 
-use adapter::driven::{EventBusConfig, InMemoryEventBus, MySqlInventoryRepository, MySqlOrderRepository};
+use adapter::driven::{ConsoleLogger, EventBusConfig, InMemoryEventBus, MySqlInventoryRepository, MySqlOrderRepository};
 use adapter::driver::rest_api::{create_router, AppStateInner};
 use adapter::{DatabaseConfig, DatabaseMigration};
 use application::service::{InventoryApplicationService, OrderApplicationService};
+use domain::port::Logger;
 
 use sqlx::mysql::MySqlPoolOptions;
 use std::sync::Arc;
@@ -13,18 +14,22 @@ use tower_http::cors::CorsLayer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== 書店注文管理システム REST API ===");
-    println!("ドメイン駆動設計サンプルプロジェクト");
-    println!();
+    // ロガーを作成
+    let logger: Arc<dyn Logger> = Arc::new(ConsoleLogger::new());
+
+    logger.debug("Main", "=== 書店注文管理システム REST API ===", None, None);
+    logger.debug("Main", "ドメイン駆動設計サンプルプロジェクト", None, None);
 
     // .envファイルから環境変数を読み込む
     dotenvy::dotenv().ok();
 
     // データベース設定を読み込む
     let config = DatabaseConfig::from_env()?;
-    println!(
-        "データベース設定を読み込みました: {}:{}",
-        config.host, config.port
+    logger.debug(
+        "Main",
+        &format!("データベース設定を読み込みました: {}:{}", config.host, config.port),
+        None,
+        None,
     );
 
     // 接続プールを作成
@@ -32,12 +37,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max_connections(config.max_connections)
         .connect(&config.connection_string())
         .await?;
-    println!("データベース接続プールを作成しました");
+    logger.debug("Main", "データベース接続プールを作成しました", None, None);
 
     // マイグレーションを実行
-    let migration = DatabaseMigration::new(pool.clone());
+    let migration = DatabaseMigration::new(pool.clone(), logger.clone());
     migration.run().await?;
-    println!("データベースマイグレーションを実行しました");
+    logger.debug("Main", "データベースマイグレーションを実行しました", None, None);
 
     // MySQLリポジトリを作成
     let order_repository = Arc::new(MySqlOrderRepository::new(pool.clone()));
@@ -51,11 +56,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inventory_repository.clone(),
         order_repository.clone(),
         event_bus.clone(),
+        logger.clone(),
     );
-    let notification_handler = crate::domain::handler::NotificationHandler::new();
+    let _shipping_handler = crate::domain::handler::ShippingHandler::new(
+        order_repository.clone(),
+        event_bus.clone(),
+        logger.clone(),
+    );
+    let _delivery_handler = crate::domain::handler::DeliveryHandler::new(
+        order_repository.clone(),
+        event_bus.clone(),
+        logger.clone(),
+    );
+    let notification_handler = crate::domain::handler::NotificationHandler::new(logger.clone());
     let consistency_verifier = crate::domain::handler::EventualConsistencyVerifier::new(
         order_repository.clone(),
         inventory_repository.clone(),
+        logger.clone(),
     );
 
     // 補償ハンドラーを作成
@@ -63,22 +80,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         crate::domain::handler::InventoryReservationFailureCompensationHandler::new(
             order_repository.clone(),
             event_bus.clone(),
+            logger.clone(),
         );
     let shipping_compensation_handler =
         crate::domain::handler::ShippingFailureCompensationHandler::new(
             inventory_repository.clone(),
             order_repository.clone(),
             event_bus.clone(),
+            logger.clone(),
         );
     let delivery_compensation_handler =
         crate::domain::handler::DeliveryFailureCompensationHandler::new(
             order_repository.clone(),
             event_bus.clone(),
+            logger.clone(),
         );
     let saga_coordinator =
-        crate::domain::handler::SagaCompensationCoordinator::new(event_bus.clone());
+        crate::domain::handler::SagaCompensationCoordinator::new(event_bus.clone(), logger.clone());
     let compensation_completion_handler =
-        crate::domain::handler::CompensationCompletionHandler::new();
+        crate::domain::handler::CompensationCompletionHandler::new(logger.clone());
 
     // イベントハンドラーをイベントバスに登録
     // 注文確定時は在庫予約のみ自動実行（発送・配達は手動操作）
@@ -125,11 +145,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .subscribe_saga_compensation_completed(compensation_completion_handler)
         .await?;
 
-    println!("イベントハンドラーを登録しました");
-    println!("注文フロー:");
-    println!("  1. 注文確定 → 在庫予約（自動）+ 通知送信");
-    println!("  2. 注文発送 → 手動操作（POST /orders/:id/ship）");
-    println!("  3. 配達完了 → 手動操作（POST /orders/:id/deliver）");
+    logger.debug("Main", "イベントハンドラーを登録しました", None, None);
+    logger.debug("Main", "注文フロー:", None, None);
+    logger.debug("Main", "  1. 注文確定 → 在庫予約（自動）+ 通知送信", None, None);
+    logger.debug("Main", "  2. 注文発送 → 手動操作（POST /orders/:id/ship）", None, None);
+    logger.debug("Main", "  3. 配達完了 → 手動操作（POST /orders/:id/deliver）", None, None);
 
     // アプリケーションサービスを作成（Arcを外して渡す）
     let order_service =
@@ -151,22 +171,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // サーバーを起動
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    println!("REST APIサーバーが起動しました: http://localhost:3000");
-    println!("ヘルスチェック: GET http://localhost:3000/health");
-    println!("API仕様:");
-    println!("  POST /orders - 注文作成");
-    println!("  GET  /orders - 注文一覧取得");
-    println!("  GET  /orders/:id - 注文詳細取得");
-    println!("  POST /orders/:id/books - 本を注文に追加");
-    println!("  PUT  /orders/:id/shipping-address - 配送先住所設定");
-    println!("  POST /orders/:id/confirm - 注文確定");
-    println!("  POST /orders/:id/cancel - 注文キャンセル");
-    println!("  POST /orders/:id/ship - 注文発送");
-    println!("  POST /orders/:id/deliver - 注文配達完了");
-    println!("  POST /inventory - 在庫作成（テスト用）");
-    println!("  GET  /inventory - 在庫一覧取得");
-    println!("  GET  /inventory/:book_id - 在庫詳細取得");
-    println!();
+    logger.debug("Main", "REST APIサーバーが起動しました: http://localhost:3000", None, None);
+    logger.debug("Main", "ヘルスチェック: GET http://localhost:3000/health", None, None);
+    logger.debug("Main", "API仕様:", None, None);
+    logger.debug("Main", "  POST /orders - 注文作成", None, None);
+    logger.debug("Main", "  GET  /orders - 注文一覧取得", None, None);
+    logger.debug("Main", "  GET  /orders/:id - 注文詳細取得", None, None);
+    logger.debug("Main", "  POST /orders/:id/books - 本を注文に追加", None, None);
+    logger.debug("Main", "  PUT  /orders/:id/shipping-address - 配送先住所設定", None, None);
+    logger.debug("Main", "  POST /orders/:id/confirm - 注文確定", None, None);
+    logger.debug("Main", "  POST /orders/:id/cancel - 注文キャンセル", None, None);
+    logger.debug("Main", "  POST /orders/:id/ship - 注文発送", None, None);
+    logger.debug("Main", "  POST /orders/:id/deliver - 注文配達完了", None, None);
+    logger.debug("Main", "  POST /inventory - 在庫作成（テスト用）", None, None);
+    logger.debug("Main", "  GET  /inventory - 在庫一覧取得", None, None);
+    logger.debug("Main", "  GET  /inventory/:book_id - 在庫詳細取得", None, None);
 
     axum::serve(listener, app).await?;
 

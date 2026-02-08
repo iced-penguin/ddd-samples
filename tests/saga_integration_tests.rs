@@ -11,7 +11,7 @@ use bookstore_order_management::domain::model::{
 };
 use bookstore_order_management::domain::port::EventBus;
 use bookstore_order_management::domain::port::{
-    InventoryRepository, OrderRepository, RepositoryError,
+    InventoryRepository, Logger, OrderRepository, RepositoryError,
 };
 use bookstore_order_management::domain::serialization::{EventSerializer, SerializationError};
 
@@ -19,6 +19,29 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use uuid::Uuid;
+
+// テスト用のモックロガー
+#[derive(Clone)]
+struct MockLogger;
+
+impl Logger for MockLogger {
+    fn debug(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+        // テスト用なので何もしない
+    }
+
+    fn info(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+        // テスト用なので何もしない
+    }
+
+    fn warn(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+        // テスト用なので何もしない
+    }
+
+    fn error(&self, _component: &str, _message: &str, _correlation_id: Option<Uuid>, _context: Option<HashMap<String, String>>) {
+        // テスト用なので何もしない
+    }
+}
 
 // テスト用ヘルパー関数
 fn serialize_domain_event(event: &DomainEvent) -> Result<String, SerializationError> {
@@ -153,14 +176,16 @@ async fn test_complete_order_lifecycle_saga_flow() {
     let event_bus = Arc::new(InMemoryEventBus::new(config));
 
     // ハンドラーの作成（自動実行される在庫予約ハンドラーのみ）
+    let logger = Arc::new(MockLogger);
     let inventory_handler = InventoryReservationHandler::new(
         inventory_repo.clone(),
         order_repo.clone(),
         event_bus.clone(),
+        logger.clone(),
     );
-    let notification_handler = NotificationHandler::new();
+    let notification_handler = NotificationHandler::new(logger.clone());
     let consistency_verifier =
-        EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone());
+        EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone(), logger.clone());
 
     // イベントバスにハンドラーを登録（自動実行される部分のみ）
     event_bus
@@ -252,8 +277,6 @@ async fn test_complete_order_lifecycle_saga_flow() {
         "Inventory should be exactly {} (initial: {} - ordered: {}), but got: {}. This indicates a lack of idempotency in event handlers.",
         expected_final_inventory, initial_inventory, order_quantity, final_inventory.quantity_on_hand()
     );
-
-    println!("✅ Order confirmation saga flow test passed - Inventory reserved with idempotency maintained");
 }
 
 /// **Feature: choreography-saga-refactoring, Property 25: Event Handler Idempotency**
@@ -264,10 +287,12 @@ async fn test_event_handler_idempotency() {
     let inventory_repo = Arc::new(MockInventoryRepository::new());
     let order_repo = Arc::new(MockOrderRepository::new());
     let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
+    let logger = Arc::new(MockLogger);
     let handler = InventoryReservationHandler::new(
         inventory_repo.clone(),
         order_repo.clone(),
         event_bus.clone(),
+        logger,
     );
 
     // テスト用の在庫を追加
@@ -312,9 +337,6 @@ async fn test_event_handler_idempotency() {
     let result3 = handler.handle(event.clone()).await;
 
     // 全ての処理が成功することを確認（現在の実装では2回目以降は失敗する可能性がある）
-    println!("First processing result: {:?}", result1);
-    println!("Second processing result: {:?}", result2);
-    println!("Third processing result: {:?}", result3);
 
     // 在庫の最終状態を確認
     let final_inventory = inventory_repo
@@ -324,14 +346,6 @@ async fn test_event_handler_idempotency() {
         .unwrap();
     let expected_final_inventory = initial_inventory - order_quantity;
 
-    println!("Initial inventory: {}", initial_inventory);
-    println!("Order quantity: {}", order_quantity);
-    println!("Expected final inventory: {}", expected_final_inventory);
-    println!(
-        "Actual final inventory: {}",
-        final_inventory.quantity_on_hand()
-    );
-
     // 冪等性の検証：在庫は1回だけ減るべき
     // 注意：現在の実装では冪等性が実装されていないため、このテストは失敗する
     assert_eq!(
@@ -340,8 +354,6 @@ async fn test_event_handler_idempotency() {
         "Idempotency violation: Inventory should be {} after processing the same event multiple times, but got {}. Each event should only be processed once.",
         expected_final_inventory, final_inventory.quantity_on_hand()
     );
-
-    println!("✅ Event handler idempotency test passed - Same event processed multiple times with consistent results");
 }
 
 /// **Feature: choreography-saga-refactoring, Property 12: Saga Compensation**
@@ -354,14 +366,16 @@ async fn test_saga_compensation_flow() {
     let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
 
     // ハンドラーの作成
+    let logger = Arc::new(MockLogger);
     let inventory_handler = InventoryReservationHandler::new(
         inventory_repo.clone(),
         order_repo.clone(),
         event_bus.clone(),
+        logger.clone(),
     );
     let compensation_handler =
-        InventoryReservationFailureCompensationHandler::new(order_repo.clone(), event_bus.clone());
-    let saga_coordinator = SagaCompensationCoordinator::new(event_bus.clone());
+        InventoryReservationFailureCompensationHandler::new(order_repo.clone(), event_bus.clone(), logger.clone());
+    let saga_coordinator = SagaCompensationCoordinator::new(event_bus.clone(), logger);
 
     // イベントバスにハンドラーを登録
     event_bus
@@ -445,8 +459,6 @@ async fn test_saga_compensation_flow() {
         insufficient_inventory,
         "Inventory should remain unchanged after compensation"
     );
-
-    println!("✅ Saga compensation test passed - Order cancelled due to insufficient inventory");
 }
 
 /// **Feature: choreography-saga-refactoring, Property 15: Concurrent Handler Processing**
@@ -458,9 +470,10 @@ async fn test_concurrent_handler_processing() {
     let inventory_repo = Arc::new(MockInventoryRepository::new());
 
     // 複数の異なるハンドラーを登録
-    let notification_handler = NotificationHandler::new();
+    let logger = Arc::new(MockLogger);
+    let notification_handler = NotificationHandler::new(logger.clone());
     let consistency_verifier =
-        EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone());
+        EventualConsistencyVerifier::new(order_repo.clone(), inventory_repo.clone(), logger);
 
     event_bus
         .subscribe_order_confirmed(notification_handler)
@@ -497,8 +510,6 @@ async fn test_concurrent_handler_processing() {
 
     // 追加の処理時間を待機
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-
-    println!("✅ Concurrent handler processing test passed - All events processed successfully");
 }
 
 /// **Feature: choreography-saga-refactoring, Property 21: Event Serialization Round Trip**
@@ -547,8 +558,6 @@ async fn test_event_serialization_round_trip() {
         original_event.metadata.event_version, deserialized.metadata.event_version,
         "Event version should be preserved"
     );
-
-    println!("✅ Event serialization round trip test passed - All data preserved");
 }
 
 /// **Feature: choreography-saga-refactoring, Property 8: Order Confirmation Saga Step**
@@ -558,10 +567,12 @@ async fn test_order_confirmation_saga_step() {
     let inventory_repo = Arc::new(MockInventoryRepository::new());
     let order_repo = Arc::new(MockOrderRepository::new());
     let event_bus = Arc::new(InMemoryEventBus::new(EventBusConfig::default()));
+    let logger = Arc::new(MockLogger);
     let handler = InventoryReservationHandler::new(
         inventory_repo.clone(),
         order_repo.clone(),
         event_bus.clone(),
+        logger,
     );
 
     // イベントバスにハンドラーを登録
@@ -617,8 +628,6 @@ async fn test_order_confirmation_saga_step() {
         7,
         "Inventory should be reserved after order confirmation"
     );
-
-    println!("✅ Order confirmation saga step test passed - Inventory reserved successfully");
 }
 
 /// **Feature: choreography-saga-refactoring, Property 24: Serialization Error Clarity**
