@@ -1,10 +1,10 @@
 # 書店注文管理システム
 
-ドメイン駆動設計（Domain-Driven Design, DDD）の主要概念を実践的に学ぶためのサンプルプロジェクトです。オンライン書店における注文管理システムを題材に、エンティティ、値オブジェクト、集約、ドメインイベント、リポジトリパターンなどのDDD戦術的パターンをRustで実装しています。
+ドメイン駆動設計（Domain-Driven Design, DDD）の主要概念を実践的に学ぶためのサンプルプロジェクトです。
 
 ## 📚 プロジェクト概要
 
-本システムは、顧客が書籍を選択し、注文を作成し、配送を受け取るまでのプロセスを管理します。ビジネスロジックをドメイン層に集約し、ポートとアダプターアーキテクチャ（ヘキサゴナルアーキテクチャ）を採用することで、技術的な詳細からドメインモデルを分離しています。
+本システムは、顧客が書籍を選択し、注文を作成し、配送を受け取るまでのプロセスを管理します。ビジネスロジックをドメイン層に集約し、ポートとアダプターを採用することで、技術的な詳細からドメインモデルを分離しています。
 
 ### 主な機能
 
@@ -85,7 +85,7 @@ curl -X POST http://localhost:3000/orders/{order_id}/books \
 curl -X POST http://localhost:3000/orders/{order_id}/confirm
 ```
 
-詳細なAPIリファレンスについては、[APIリファレンス](docs/API_REFERENCE.md)と[注文フローガイド](docs/ORDER_FLOW_GUIDE.md)を参照してください。
+詳細なAPIの使用方法については、[注文フローガイド](docs/ORDER_FLOW_GUIDE.md)を参照してください。
 
 ## 🛠️ 開発
 
@@ -159,9 +159,8 @@ docker exec -it bookstore_mysql mysql -u bookstore_user -p bookstore_db
 - [DDDコンセプトガイド](docs/DDD_CONCEPTS.md) - ドメイン駆動設計の学習ポイント
 - [アーキテクチャガイド](docs/ARCHITECTURE.md) - システムアーキテクチャの詳細
 - [セットアップガイド](docs/SETUP_GUIDE.md) - 詳細なセットアップ手順
-- [APIリファレンス](docs/API_REFERENCE.md) - REST API の詳細仕様
+- [注文フローガイド](docs/ORDER_FLOW_GUIDE.md) - 注文処理の詳細フローとAPI使用方法
 - [テストガイド](docs/TESTING_GUIDE.md) - テスト戦略と実行方法
-- [注文フローガイド](docs/ORDER_FLOW_GUIDE.md) - 注文処理の詳細フロー
 
 ## 📖 参考資料
 

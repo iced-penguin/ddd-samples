@@ -11,7 +11,7 @@ pub struct Inventory {
 
 impl Inventory {
     /// 新しい在庫を作成
-    /// 
+    ///
     /// # Arguments
     /// * `book_id` - 書籍ID
     /// * `quantity_on_hand` - 在庫数
@@ -33,10 +33,10 @@ impl Inventory {
     }
 
     /// 在庫を予約する
-    /// 
+    ///
     /// # Arguments
     /// * `quantity` - 予約する数量
-    /// 
+    ///
     /// # Returns
     /// * `Ok(())` - 予約成功
     /// * `Err(DomainError::InsufficientInventory)` - 在庫不足
@@ -49,7 +49,7 @@ impl Inventory {
     }
 
     /// 在庫を解放する（キャンセル時など）
-    /// 
+    ///
     /// # Arguments
     /// * `quantity` - 解放する数量
     pub fn release(&mut self, quantity: u32) -> Result<(), DomainError> {
@@ -58,10 +58,10 @@ impl Inventory {
     }
 
     /// 指定された数量の在庫が利用可能かチェック
-    /// 
+    ///
     /// # Arguments
     /// * `quantity` - チェックする数量
-    /// 
+    ///
     /// # Returns
     /// * `true` - 在庫が十分にある
     /// * `false` - 在庫が不足している

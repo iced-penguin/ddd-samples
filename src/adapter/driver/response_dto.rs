@@ -1,5 +1,5 @@
+use crate::domain::model::{Inventory, Money, Order, OrderLine, ShippingAddress};
 use serde::Serialize;
-use crate::domain::model::{Order, OrderLine, ShippingAddress, Inventory, Money};
 
 /// 注文一覧用のレスポンスDTO
 #[derive(Serialize)]
@@ -75,20 +75,22 @@ impl OrderSummaryResponse {
 impl OrderDetailResponse {
     /// ドメインオブジェクトからOrderDetailResponseを作成
     pub fn from_order(order: &Order) -> Self {
-        let order_lines: Vec<OrderLineResponse> = order.order_lines()
+        let order_lines: Vec<OrderLineResponse> = order
+            .order_lines()
             .iter()
             .map(OrderLineResponse::from_order_line)
             .collect();
 
-        let shipping_address = order.shipping_address()
+        let shipping_address = order
+            .shipping_address()
             .map(ShippingAddressResponse::from_shipping_address);
 
         // 小計を計算（配送料を除く）
-        let subtotal = order.order_lines().iter()
+        let subtotal = order
+            .order_lines()
+            .iter()
             .map(|line| line.subtotal())
-            .fold(Money::jpy(0), |acc, amount| {
-                acc.add(&amount).unwrap_or(acc)
-            });
+            .fold(Money::jpy(0), |acc, amount| acc.add(&amount).unwrap_or(acc));
 
         // 配送料を計算
         let shipping_fee = if subtotal.amount() >= 10_000 {
@@ -120,7 +122,7 @@ impl OrderLineResponse {
     pub fn from_order_line(order_line: &OrderLine) -> Self {
         let unit_price = order_line.unit_price();
         let subtotal = order_line.subtotal();
-        
+
         Self {
             book_id: order_line.book_id().to_string(),
             quantity: order_line.quantity(),
@@ -158,21 +160,23 @@ impl InventoryResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::model::{OrderId, CustomerId, BookId, Money, OrderLine, ShippingAddress, Inventory};
+    use crate::domain::model::{
+        BookId, CustomerId, Inventory, Money, OrderId, OrderLine, ShippingAddress,
+    };
 
     #[test]
     fn test_order_summary_response_from_order() {
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
         let mut order = Order::new(order_id, customer_id);
-        
+
         // 書籍を追加
         let book_id = BookId::new();
         let price = Money::jpy(1000);
         order.add_book(book_id, 2, price).unwrap();
 
         let response = OrderSummaryResponse::from_order(&order);
-        
+
         assert_eq!(response.order_id, order_id.to_string());
         assert_eq!(response.customer_id, customer_id.to_string());
         assert_eq!(response.status, "Pending");
@@ -185,7 +189,7 @@ mod tests {
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
         let mut order = Order::new(order_id, customer_id);
-        
+
         // 書籍を追加
         let book_id = BookId::new();
         let price = Money::jpy(1000);
@@ -198,11 +202,12 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             Some("ビル名".to_string()),
-        ).unwrap();
+        )
+        .unwrap();
         order.set_shipping_address(address);
 
         let response = OrderDetailResponse::from_order(&order);
-        
+
         assert_eq!(response.order_id, order_id.to_string());
         assert_eq!(response.customer_id, customer_id.to_string());
         assert_eq!(response.status, "Pending");
@@ -220,7 +225,7 @@ mod tests {
         let order_line = OrderLine::new(book_id, 3, price).unwrap();
 
         let response = OrderLineResponse::from_order_line(&order_line);
-        
+
         assert_eq!(response.book_id, book_id.to_string());
         assert_eq!(response.quantity, 3);
         assert_eq!(response.unit_price_amount, 1500);
@@ -237,10 +242,11 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             Some("ビル名".to_string()),
-        ).unwrap();
+        )
+        .unwrap();
 
         let response = ShippingAddressResponse::from_shipping_address(&address);
-        
+
         assert_eq!(response.postal_code, "1234567");
         assert_eq!(response.prefecture, "東京都");
         assert_eq!(response.city, "渋谷区");
@@ -256,10 +262,11 @@ mod tests {
             "渋谷区".to_string(),
             "道玄坂1-1-1".to_string(),
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         let response = ShippingAddressResponse::from_shipping_address(&address);
-        
+
         assert_eq!(response.building, None);
     }
 
@@ -269,7 +276,7 @@ mod tests {
         let inventory = Inventory::new(book_id, 50);
 
         let response = InventoryResponse::from_inventory(&inventory);
-        
+
         assert_eq!(response.book_id, book_id.to_string());
         assert_eq!(response.quantity_on_hand, 50);
     }
@@ -279,14 +286,14 @@ mod tests {
         let order_id = OrderId::new();
         let customer_id = CustomerId::new();
         let mut order = Order::new(order_id, customer_id);
-        
+
         // 高額な書籍を追加（配送料無料になる）
         let book_id = BookId::new();
         let price = Money::jpy(12000);
         order.add_book(book_id, 1, price).unwrap();
 
         let response = OrderDetailResponse::from_order(&order);
-        
+
         assert_eq!(response.subtotal_amount, 12000);
         assert_eq!(response.shipping_fee_amount, 0); // 配送料無料
         assert_eq!(response.total_amount, 12000);

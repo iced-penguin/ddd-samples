@@ -14,8 +14,6 @@ pub enum DomainError {
     OrderValidation(String),
     /// 通貨の不一致
     CurrencyMismatch,
-    /// リポジトリエラー（インフラ層のエラーをラップ）
-    RepositoryError(String),
     /// 無効な値
     InvalidValue(String),
 }
@@ -29,7 +27,6 @@ impl std::fmt::Display for DomainError {
             DomainError::InvalidAddress(msg) => write!(f, "Invalid address: {}", msg),
             DomainError::OrderValidation(msg) => write!(f, "Order validation failed: {}", msg),
             DomainError::CurrencyMismatch => write!(f, "Currency mismatch"),
-            DomainError::RepositoryError(msg) => write!(f, "Repository error: {}", msg),
             DomainError::InvalidValue(msg) => write!(f, "Invalid value: {}", msg),
         }
     }

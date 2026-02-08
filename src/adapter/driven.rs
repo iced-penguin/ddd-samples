@@ -1,9 +1,12 @@
 // 駆動される側アダプター（リポジトリ実装など）
 
-mod order_repository;
+mod console_logger;
+mod event_bus;
 mod inventory_repository;
-mod event_publisher;
+mod order_repository;
 
-pub use order_repository::MySqlOrderRepository;
+pub use console_logger::ConsoleLogger;
+pub use event_bus::InMemoryEventBus;
+pub use event_bus::EventBusConfig;
 pub use inventory_repository::MySqlInventoryRepository;
-pub use event_publisher::ConsoleEventPublisher;
+pub use order_repository::MySqlOrderRepository;
