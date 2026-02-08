@@ -135,7 +135,7 @@ cargo test --test '*'
 
 詳細なテスト戦略については、[テストガイド](docs/TESTING_GUIDE.md)を参照してください。
 
-## データベース操作
+## 🗄️ データベース操作
 
 ### データベースのバックアップ
 
@@ -154,7 +154,7 @@ docker exec -i bookstore_mysql mysql -u bookstore_user -p bookstore_db < backup.
 docker exec -it bookstore_mysql mysql -u bookstore_user -p bookstore_db
 ```
 
-## � 参ドキュメント
+## 📚 参考ドキュメント
 
 - [DDDコンセプトガイド](docs/DDD_CONCEPTS.md) - ドメイン駆動設計の学習ポイント
 - [アーキテクチャガイド](docs/ARCHITECTURE.md) - システムアーキテクチャの詳細
